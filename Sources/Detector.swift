@@ -83,11 +83,24 @@ final class Detector: NSObject, ObservableObject {
         get { lock.withLock { core.config.zoneMultiplier } }
         set { lock.withLock { core.config.zoneMultiplier = newValue } }
     }
+    /// The three "when a hand lingers" cues the user can switch on independently. Read on the
+    /// capture queue (where the level is decided) and written from the main thread, so they take the
+    /// same lock as the detection config. Blur is handled in the view layer, not here.
+    var vibrateEnabled: Bool {
+        get { lock.withLock { vibrateEnabledFlag } }
+        set { lock.withLock { vibrateEnabledFlag = newValue } }
+    }
+    var voiceEnabled: Bool {
+        get { lock.withLock { voiceEnabledFlag } }
+        set { lock.withLock { voiceEnabledFlag = newValue } }
+    }
 
     /// The core is read on the capture queue and its config is written from the main thread, so
     /// unlike the rest of the detection state it does need the lock.
     private var core = DetectionCore()
     private let lock = NSLock()
+    private var vibrateEnabledFlag = true
+    private var voiceEnabledFlag = false
     private var pausedFlag = false
     private var backgrounded = false
     /// True once the session is allowed to keep capturing while the app is off-screen — i.e. in
@@ -221,8 +234,9 @@ final class Detector: NSObject, ObservableObject {
 
     private func clearLiveState() {
         // Whatever stopped detection — a pause, the window being stashed, a call coming in — we can no
-        // longer tell whether the hand is still there, so the buzz must not outlive it.
+        // longer tell whether the hand is still there, so the cues must not outlive it.
         Haptics.stopSustained()
+        CalmingTone.stopSustained()
         onMain {
             self.touching = false
             self.hasFace = false
@@ -503,11 +517,16 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Minimized, the floating window is the only thing the app can show — so it carries the red
         // frame's job: red on a touch, bright red once the hand has been there for the set delay.
         display.showLevel(out.level)
-        // The buzz is the floating window's version of the blur: minimized, the app can't dim the
-        // phone or show anything but that little bar, so a sustained touch is felt instead — and it
-        // keeps going until the hand comes down.
-        if out.level >= 3, display.isInPictureInPicture { Haptics.startSustained() }
-        else { Haptics.stopSustained() }
+        // The two non-visual cues for a lingering hand, each independent and off unless the user
+        // switched it on. They keep going until the hand comes down. Blur is the third cue and is
+        // handled in the view layer where the screen can actually be dimmed.
+        if out.level >= 3 {
+            if vibrateEnabled { Haptics.startSustained() } else { Haptics.stopSustained() }
+            if voiceEnabled { CalmingTone.startSustained() } else { CalmingTone.stopSustained() }
+        } else {
+            Haptics.stopSustained()
+            CalmingTone.stopSustained()
+        }
 
         let fpsValue = emaFps
         let shouldPublishStats = out.didStartTouch || out.didEndTouch || now - lastStatsPublish >= 1

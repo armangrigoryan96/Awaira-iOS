@@ -10,6 +10,14 @@ struct ContentView: View {
     /// arriving here still does not trigger iOS's permission sheet until this is set by the user.
     @State private var cameraRequested = false
     @State private var selectedTab: MobileAppTab = .dashboard
+    /// Whether the weekly chart shows raw daily totals or the per-hour rate.
+    @State private var weekMode: WeekChartMode = .total
+
+    /// The three independent "when a hand lingers" cues, each switched on or off by the user.
+    /// Vibrate and voice are applied to the detector; blur is applied to the overlay in `body`.
+    @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
+    @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
+    @AppStorage("mobileBlurEnabled") private var blurEnabled = true
 
     /// UI tests run without a camera (the simulator has none), so they launch with `-UITest` and
     /// the session is never started — the HUD and overlays still render.
@@ -37,7 +45,7 @@ struct ContentView: View {
             if selectedTab == .dashboard && !cameraRequested && !isUITest {
                 cameraStartCard
             }
-            DimOverlay(active: detector.touchLevel >= 3)
+            DimOverlay(active: blurEnabled && detector.touchLevel >= 3)
             TouchBorder(level: detector.touchLevel)
         }
         .statusBarHidden()
@@ -47,10 +55,13 @@ struct ContentView: View {
             // The floating bar is always vertical now; the orientation choice was removed.
             detector.pipOrientation = .vertical
             applyTiming()
+            applyAlerts()
         }
         // The setting is live: moving the slider mid-touch changes when this touch escalates,
         // because `DetectionCore` compares the elapsed time against the current config every frame.
         .onChange(of: settings.buzzAfter) { applyTiming() }
+        .onChange(of: vibrateEnabled) { applyAlerts() }
+        .onChange(of: voiceEnabled) { applyAlerts() }
         .onChange(of: detector.touchLevel) { level in
             // Desktop Awaira makes one gentle sound at the start of a touch. This is local iOS
             // system audio, so it needs no permission and never records anything.
@@ -99,6 +110,11 @@ struct ContentView: View {
     private func applyTiming() {
         detector.level3After = settings.buzzAfter
         detector.level2After = settings.lingerAfter
+    }
+
+    private func applyAlerts() {
+        detector.vibrateEnabled = vibrateEnabled
+        detector.voiceEnabled = voiceEnabled
     }
 
     private var cameraStartCard: some View {
@@ -259,19 +275,45 @@ struct ContentView: View {
                 Text("Weekly overview")
                     .font(.headline)
                 Spacer()
-                Text(String(format: "%.1f / hour", detector.weeklyRate))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.mint)
+                Picker("View", selection: $weekMode) {
+                    ForEach(WeekChartMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+                .accessibilityIdentifier("weekModePicker")
             }
-            MobileWeekChart(days: detector.week)
+
+            // Both headline numbers, always visible: the seven-day total and the per-hour rate.
+            HStack(spacing: 22) {
+                weeklyStat(value: "\(detector.weeklyTotal)", label: "total")
+                weeklyStat(value: String(format: "%.1f", detector.weeklyRate), label: "per hour")
+            }
+
+            MobileWeekChart(days: detector.week, mode: weekMode)
                 .frame(height: 125)
-            Text("Each bar is a day’s hand-to-face interruptions. Stats remain only on this iPhone.")
+            Text(weekMode == .total
+                 ? "Each bar is a day’s hand-to-face interruptions. Stats remain only on this iPhone."
+                 : "Each bar is a day’s interruptions per tracked hour. Stats remain only on this iPhone.")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.50))
         }
         .padding(16)
         .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1) }
+    }
+
+    private func weeklyStat(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.mint)
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.white.opacity(0.55))
+        }
     }
 
     private var activitySummary: some View {
@@ -377,6 +419,7 @@ struct ContentView: View {
 
     private var settingsPanel: some View {
         VStack(spacing: 18) {
+            alertToggles
             barThicknessSlider
             buzzDelaySlider
             Button {
@@ -399,18 +442,56 @@ struct ContentView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    /// How the floating thread lies — the whole of what the app can decide about the window. Which
-    /// side of the screen it lands on is iOS's, remembered per orientation and not askable for, so
-    /// there are two buttons here rather than four with two that do nothing.
-    private var orientationPicker: some View {
-        settingRow("floating bar", value: nil) {
-            Picker("floating bar", selection: $detector.pipOrientation) {
-                Text("horizontal").tag(PipWindow.Orientation.horizontal)
-                Text("vertical").tag(PipWindow.Orientation.vertical)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("orientationPicker")
+    /// The three cues for a lingering hand. Each is an independent checkbox; any combination
+    /// (including none) is allowed, mirroring the desktop app's sound / tone / effect switches.
+    private var alertToggles: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("when a hand lingers")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
+            alertToggleRow(icon: "iphone.radiowaves.left.and.right",
+                           title: "Vibrate",
+                           subtitle: "Buzz while the hand stays near your face.",
+                           isOn: $vibrateEnabled)
+            alertToggleRow(icon: "waveform",
+                           title: "Voice",
+                           subtitle: "Play a soft calming tone until the hand comes down.",
+                           isOn: $voiceEnabled)
+            alertToggleRow(icon: "rectangle.on.rectangle",
+                           title: "Blur screen",
+                           subtitle: "Softly blur the screen with an encouraging line.",
+                           isOn: $blurEnabled)
         }
+    }
+
+    private func alertToggleRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(isOn.wrappedValue ? .mint : .white.opacity(0.4))
+                    .frame(width: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isOn.wrappedValue ? .mint : .white.opacity(0.3))
+            }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("alertToggle.\(title)")
     }
 
     /// How thick the floating bar is. What travels to AVKit is only the ratio against

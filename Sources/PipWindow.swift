@@ -102,11 +102,10 @@ enum PipWindow {
 
     /// The orientation the user last chose. A floating window that reset itself on every launch
     /// would be worse than not offering the choice.
+    /// Always vertical now — the orientation choice was removed from the UI, but the stored value
+    /// and enum stay so existing preferences and the window-sizing code keep working.
     static var savedOrientation: Orientation {
-        get {
-            let raw = UserDefaults.standard.string(forKey: orientationKey) ?? ""
-            return Orientation(rawValue: raw) ?? .horizontal
-        }
+        get { .vertical }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: orientationKey) }
     }
 
