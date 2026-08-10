@@ -10,7 +10,7 @@ final class PipWindowTests: XCTestCase {
         // replaced ignored the frames' shape and stayed a tall portrait rectangle. And since AVKit
         // takes only the ratio and picks its own scale (the window comes out the full width of the
         // screen), the ratio is the only lever on how tall the bar is: 8:1 gave ~48 pt on an
-        // iPhone 11, so it has to stay well past that — at *every* setting of the slider, or the
+        // iPhone 11, so it has to stay well past that — at every setting of the slider, or the
         // thickest one turns the thread into a slab.
         for thickness in [PipWindow.thicknessRange.lowerBound,
                           PipWindow.defaultThickness,
@@ -29,28 +29,17 @@ final class PipWindowTests: XCTestCase {
     /// The slider hands us whatever the user drags it to, and `savedThickness` hands us whatever is
     /// in `UserDefaults` — including, on an older install, nothing at all.
     func testAThicknessOutsideTheRangeCannotReachTheWindow() {
-        let tooThin = PipWindow.preferredSize(for: .horizontal, thickness: 0)
-        XCTAssertEqual(tooThin.height, PipWindow.thicknessRange.lowerBound)
-        let tooThick = PipWindow.preferredSize(for: .horizontal, thickness: 5000)
-        XCTAssertEqual(tooThick.height, PipWindow.thicknessRange.upperBound)
+        let tooThin = PipWindow.preferredSize(thickness: 0)
+        XCTAssertEqual(tooThin.width, PipWindow.thicknessRange.lowerBound)
+        let tooThick = PipWindow.preferredSize(thickness: 5000)
+        XCTAssertEqual(tooThick.width, PipWindow.thicknessRange.upperBound)
     }
 
     func testAskingThickerGivesAThickerBar() {
-        let thin = PipWindow.preferredSize(for: .horizontal, thickness: 4)
-        let thick = PipWindow.preferredSize(for: .horizontal, thickness: 40)
-        XCTAssertGreaterThan(thick.height, thin.height)
-        XCTAssertEqual(thin.width, thick.width, "the length is only ever the ratio's numerator")
-    }
-
-    func testTurningItUprightSwapsTheSides() {
-        // Standing the thread up is the whole of what the app controls about the window's shape and
-        // place — the side it lands on is remembered by iOS and can't be asked for.
-        let flat = PipWindow.preferredSize(for: .horizontal, thickness: PipWindow.defaultThickness)
-        let upright = PipWindow.preferredSize(for: .vertical, thickness: PipWindow.defaultThickness)
-        XCTAssertEqual(flat.width, upright.height)
-        XCTAssertEqual(flat.height, upright.width)
-        XCTAssertGreaterThan(flat.width, flat.height)
-        XCTAssertGreaterThan(upright.height, upright.width)
+        let thin = PipWindow.preferredSize(thickness: 4)
+        let thick = PipWindow.preferredSize(thickness: 40)
+        XCTAssertGreaterThan(thick.width, thin.width)
+        XCTAssertEqual(thin.height, thick.height, "the length is only ever the ratio's numerator")
     }
 
     func testTheThicknessSurvivesARelaunch() {
@@ -58,7 +47,7 @@ final class PipWindowTests: XCTestCase {
         defer { PipWindow.savedThickness = original }
         PipWindow.savedThickness = 24
         XCTAssertEqual(PipWindow.savedThickness, 24)
-        XCTAssertEqual(PipWindow.preferredSize(for: .horizontal).height, 24)
+        XCTAssertEqual(PipWindow.preferredSize().width, 24)
     }
 
     func testTheBarCarriesTheRedFramesJob() {

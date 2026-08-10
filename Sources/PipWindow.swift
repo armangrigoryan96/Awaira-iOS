@@ -25,8 +25,7 @@ final class PipWindowController: AVPictureInPictureVideoCallViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = PipWindow.colour(for: .idle)
-        preferredContentSize = PipWindow.preferredSize(for: PipWindow.savedOrientation,
-                                                       thickness: PipWindow.savedThickness)
+        preferredContentSize = PipWindow.preferredSize(thickness: PipWindow.savedThickness)
         // Nothing in the window is meant to be touched: it carries no controls, and a tap that lands
         // on it should not be the app's doing. The window's own drag and close gestures belong to
         // iOS and can't be refused — being a thread narrower than a fingertip is what handles those.
@@ -43,19 +42,6 @@ final class PipWindowController: AVPictureInPictureVideoCallViewController {
 }
 
 enum PipWindow {
-    /// Which way the thread lies. This is the whole of what the app can decide about the floating
-    /// window's shape and place.
-    ///
-    /// Not for lack of trying: pointing PiP at a source view parked against the left edge, then the
-    /// right, was tested on a phone and changed nothing — the window returned to wherever it had
-    /// last been dragged. iOS keeps one remembered position per orientation and exposes no API for
-    /// it, so "put it on the right" is not something a third-party app can ask for. Standing the
-    /// thread up or laying it flat is.
-    enum Orientation: String, CaseIterable, Identifiable {
-        case horizontal, vertical
-        var id: String { rawValue }
-    }
-
     /// The two numbers we ask the window to be. They are not a size — AVKit only takes the *ratio*
     /// from them, then picks its own scale (the window comes out the full length of the screen), and
     /// a pinch shrinks it further, which iOS remembers. So the ratio is the only lever on how thin
@@ -74,7 +60,7 @@ enum PipWindow {
     /// value asked for. The thick end is capped rather than open: the window's touches belong to iOS
     /// and cannot be refused, so a bar wide enough to land a finger on is a bar that will get tapped
     /// and dragged. 80 keeps the ratio at 20:1, still unmistakably a bar rather than a rectangle.
-    static let defaultThickness: CGFloat = 8
+    static let defaultThickness: CGFloat = 7
     static let thicknessRange: ClosedRange<CGFloat> = 2...80
     static let thicknessStep: CGFloat = 2
 
@@ -82,13 +68,9 @@ enum PipWindow {
         min(max(value, thicknessRange.lowerBound), thicknessRange.upperBound)
     }
 
-    static func preferredSize(for orientation: Orientation,
-                              thickness: CGFloat = savedThickness) -> CGSize {
+    static func preferredSize(thickness: CGFloat = savedThickness) -> CGSize {
         let t = clamp(thickness: thickness)
-        switch orientation {
-        case .horizontal: return CGSize(width: length, height: t)
-        case .vertical:   return CGSize(width: t, height: length)
-        }
+        return CGSize(width: t, height: length)
     }
 
     static func aspectRatio(thickness: CGFloat = savedThickness) -> CGFloat {
@@ -97,17 +79,7 @@ enum PipWindow {
 
     // MARK: Remembering the choice
 
-    private static let orientationKey = "pipWindowOrientation"
     private static let thicknessKey = "pipWindowThickness"
-
-    /// The orientation the user last chose. A floating window that reset itself on every launch
-    /// would be worse than not offering the choice.
-    /// Always vertical now — the orientation choice was removed from the UI, but the stored value
-    /// and enum stay so existing preferences and the window-sizing code keep working.
-    static var savedOrientation: Orientation {
-        get { .vertical }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: orientationKey) }
-    }
 
     /// The thickness the user last chose, same reasoning. `object(forKey:)` because a missing key
     /// reads as 0 through `double(forKey:)`, which is indistinguishable from a real setting.

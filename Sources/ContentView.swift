@@ -36,10 +36,9 @@ struct ContentView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
-            if selectedTab == .dashboard {
-                hud
-            } else {
-                MobileLearnLibrary()
+            switch selectedTab {
+            case .dashboard: hud
+            case .learn: MobileLearnLibrary()
             }
 
             if selectedTab == .dashboard && !cameraRequested && !isUITest {
@@ -52,8 +51,6 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { mobileTabBar }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
-            // The floating bar is always vertical now; the orientation choice was removed.
-            detector.pipOrientation = .vertical
             applyTiming()
             applyAlerts()
         }
@@ -153,29 +150,33 @@ struct ContentView: View {
     }
 
     private var hud: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
-                dashboardHeader
+        ZStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    dashboardHeader
 
-                if let errorText = detector.errorText {
-                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.red.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+                    if let errorText = detector.errorText {
+                        Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.red.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    todaySummary
+                    metricGrid
+                    weeklyOverview
+                    activitySummary
+                    privacySummary
+                    MobileInsightsSection(detector: detector)
                 }
-
-                todaySummary
-                metricGrid
-                weeklyOverview
-                activitySummary
-                privacySummary
-                settingsSection
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+
+            if showSettings { settingsPopup }
         }
         .foregroundStyle(.white)
         .shadow(radius: 4)
@@ -192,11 +193,17 @@ struct ContentView: View {
                     .accessibilityIdentifier("statusLine")
             }
             Spacer()
-            Image(systemName: detector.connected ? "checkmark.shield.fill" : "lock.shield.fill")
-                .font(.title2)
-                .foregroundStyle(detector.connected ? .mint : .white.opacity(0.55))
-                .padding(10)
-                .background(.white.opacity(0.08), in: Circle())
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { showSettings = true }
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.82))
+                    .frame(width: 42, height: 42)
+                    .background(.white.opacity(0.09), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settingsToggle")
         }
     }
 
@@ -397,49 +404,47 @@ struct ContentView: View {
 
     // MARK: - Settings
 
-    private var settingsSection: some View {
-        VStack(spacing: 12) {
-            if showSettings { settingsPanel }
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { showSettings.toggle() }
-            } label: {
-                Label(showSettings ? "done" : "settings",
-                      systemImage: showSettings ? "chevron.down" : "slider.horizontal.3")
-                    .font(.footnote.weight(.medium))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(.white.opacity(0.12), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .accessibilityIdentifier("settingsToggle")
-        }
-        .padding(.bottom, 24)
-    }
+    private var settingsPopup: some View {
+        ZStack {
+            Color.black.opacity(0.48)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showSettings = false } }
 
-    private var settingsPanel: some View {
-        VStack(spacing: 18) {
-            alertToggles
-            barThicknessSlider
-            buzzDelaySlider
-            Button {
-                // The app root observes this versioned key and returns to the full onboarding
-                // without deleting the user's stats, settings, or read articles.
-                UserDefaults.standard.set(0, forKey: "awairaOnboardingVersion")
-            } label: {
-                Label("Replay onboarding", systemImage: "arrow.counterclockwise")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("Settings").font(.headline)
+                    Spacer()
+                    Button { withAnimation(.easeOut(duration: 0.2)) { showSettings = false } } label: {
+                        Image(systemName: "xmark").font(.subheadline.weight(.bold)).frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .background(.white.opacity(0.08), in: Circle())
+                }
+                alertToggles
+                barThicknessSlider
+                buzzDelaySlider
+                Button {
+                    // The app root observes this versioned key and returns to the full onboarding
+                    // without deleting the user's stats, settings, or read articles.
+                    UserDefaults.standard.set(0, forKey: "awairaOnboardingVersion")
+                    showSettings = false
+                } label: {
+                    Label("Replay onboarding", systemImage: "arrow.counterclockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered)
+                .tint(.mint)
             }
-            .buttonStyle(.bordered)
-            .tint(.mint)
+            .padding(20)
+            .frame(maxWidth: 360, alignment: .leading)
+            .background(.black.opacity(0.93), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.14), lineWidth: 1) }
+            .padding(22)
+            .transition(.scale(scale: 0.94).combined(with: .opacity))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
-        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 18))
-        .padding(.horizontal, 20)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     /// The three cues for a lingering hand. Each is an independent checkbox; any combination

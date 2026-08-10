@@ -10,17 +10,15 @@ struct IPhoneOnboardingView: View {
     @State private var source = ""
     @State private var otherSource = ""
     @State private var answers: [String: Set<String>] = [:]
+    @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
+    @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
+    @AppStorage("mobileBlurEnabled") private var blurEnabled = true
 
     private var step: OnboardingStep { onboardingSteps[index] }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color.black, Color(red: 0.035, green: 0.075, blue: 0.105)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color(red: 0.025, green: 0.06, blue: 0.09).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header
@@ -72,12 +70,8 @@ struct IPhoneOnboardingView: View {
     private func educationPage(_ page: EducationPage) -> some View {
         VStack(spacing: 24) {
             Spacer(minLength: 18)
-            Image(systemName: page.symbol)
-                .font(.system(size: 56, weight: .medium))
-                .foregroundStyle(page.accent)
-                .frame(width: 128, height: 128)
-                .background(page.accent.opacity(0.14), in: Circle())
-                .overlay { Circle().stroke(page.accent.opacity(0.34), lineWidth: 1) }
+            MobileOnboardingIllustration(symbol: page.symbol, accent: page.accent)
+                .frame(width: 210, height: 150)
             Text(page.title)
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
@@ -148,10 +142,10 @@ struct IPhoneOnboardingView: View {
 
     private var nudgePage: some View {
         VStack(alignment: .leading, spacing: 18) {
-            stepTitle("Pick your gentle nudge", helper: "When a hand lingers near your face, Awaira reacts to bring you back. On iPhone, the app shows a visual cue while open and buzzes while it is in the floating window. You can change the timing anytime in Settings.")
-            nudgeRow(symbol: "rectangle.on.rectangle", title: "Visual cue while Awaira is open", detail: "The head-zone frame changes colour when a hand reaches your face, then the screen blurs if it stays there.", color: .red)
-            nudgeRow(symbol: "iphone.radiowaves.left.and.right", title: "Buzz while Awaira is minimized", detail: "The floating bar changes colour and your iPhone buzzes after the delay you choose.", color: .orange)
-            nudgeRow(symbol: "slider.horizontal.3", title: "Change it anytime", detail: "Set the delay, floating-bar orientation, and its thickness from the in-app settings panel.", color: .mint)
+            stepTitle("Pick your gentle nudge", helper: "Choose any combination. Awaira only uses the options you check, and you can change them at any time in Settings.")
+            nudgeToggle(symbol: "iphone.radiowaves.left.and.right", title: "Vibrate", detail: "Buzz while a hand stays near your face.", color: .orange, isOn: $vibrateEnabled)
+            nudgeToggle(symbol: "waveform", title: "Voice", detail: "Play the same soft calming tone used in the desktop app.", color: .purple, isOn: $voiceEnabled)
+            nudgeToggle(symbol: "rectangle.on.rectangle", title: "Blur screen", detail: "Soften the screen with an encouraging cue while Awaira is open.", color: .mint, isOn: $blurEnabled)
         }
         .padding(.top, 30)
     }
@@ -229,6 +223,31 @@ struct IPhoneOnboardingView: View {
         .overlay { RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.1), lineWidth: 1) }
     }
 
+    private func nudgeToggle(symbol: String, title: String, detail: String, color: Color,
+                             isOn: Binding<Bool>) -> some View {
+        Button { isOn.wrappedValue.toggle() } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(isOn.wrappedValue ? color : .white.opacity(0.38))
+                    .frame(width: 38, height: 38)
+                    .background(color.opacity(isOn.wrappedValue ? 0.16 : 0.07), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.body.weight(.semibold)).foregroundStyle(.white)
+                    Text(detail).font(.footnote).foregroundStyle(.white.opacity(0.62)).lineSpacing(2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isOn.wrappedValue ? color : .white.opacity(0.3))
+            }
+            .padding(16)
+            .background(.white.opacity(isOn.wrappedValue ? 0.08 : 0.045), in: RoundedRectangle(cornerRadius: 15))
+            .overlay { RoundedRectangle(cornerRadius: 15).stroke(isOn.wrappedValue ? color.opacity(0.45) : .white.opacity(0.1), lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+    }
+
     private func toggle(_ option: String, for question: OnboardingQuestion) {
         var selected = answers[question.key, default: []]
         if question.multiple {
@@ -253,9 +272,48 @@ struct IPhoneOnboardingView: View {
     }
 
     private func finish() {
-        UserDefaults.standard.set(source == "Other" ? otherSource : source, forKey: "onboarding.acquisitionSource")
-        for (key, values) in answers { UserDefaults.standard.set(values.sorted().joined(separator: ","), forKey: "onboarding.\(key)") }
+        let sourceIDs = ["YouTube": "youtube", "TikTok": "tiktok", "Instagram": "instagram",
+                         "Google Search": "google_search", "Facebook": "facebook", "Reddit": "reddit",
+                         "Other": "other"]
+        let defaults = UserDefaults.standard
+        defaults.set(sourceIDs[source] ?? "other", forKey: "acquisitionSource")
+        defaults.set(source == "Other" ? otherSource : "", forKey: "acquisitionOther")
+        defaults.set(false, forKey: "acquisitionSubmitted")
+        for (key, values) in answers { defaults.set(values.sorted().joined(separator: ","), forKey: key) }
         onFinish()
+    }
+}
+
+/// The mobile version keeps the desktop onboarding's illustration-first rhythm, scaled for a
+/// phone: a moving cue, the focused symbol, and a small sequence of evidence dots.
+private struct MobileOnboardingIllustration: View {
+    let symbol: String
+    let accent: Color
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let phase = (sin(context.date.timeIntervalSinceReferenceDate * 1.5) + 1) / 2
+            ZStack {
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .stroke(accent.opacity((0.28 - Double(index) * 0.07) * (0.55 + phase * 0.45)), lineWidth: 1.5)
+                        .frame(width: CGFloat(76 + index * 34) + phase * 10,
+                               height: CGFloat(76 + index * 34) + phase * 10)
+                }
+                Image(systemName: symbol)
+                    .font(.system(size: 43, weight: .medium))
+                    .foregroundStyle(accent)
+                    .frame(width: 84, height: 84)
+                    .background(accent.opacity(0.15), in: Circle())
+                    .overlay { Circle().stroke(accent.opacity(0.5), lineWidth: 1.5) }
+                HStack(spacing: 8) {
+                    ForEach(0..<4, id: \.self) { index in
+                        Circle().fill(index == 2 ? accent : .white.opacity(0.18)).frame(width: 7, height: 7)
+                    }
+                }
+                .offset(y: 82)
+            }
+        }
     }
 }
 

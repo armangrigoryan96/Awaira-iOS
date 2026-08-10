@@ -53,16 +53,7 @@ final class Detector: NSObject, ObservableObject {
     @Published var errorText: String?
     /// Width / height of the camera buffer, so the overlay can undo the preview's aspect fill.
     @Published var bufferAspect: CGFloat = 3.0 / 4.0
-    /// Which way the floating thread lies while minimized. Chosen here because the thread is
-    /// deliberately too thin to touch, let alone drag — see `PipWindow.Orientation`.
-    @Published var pipOrientation = PipWindow.savedOrientation {
-        didSet {
-            let orientation = pipOrientation
-            Task { @MainActor in self.display.windowOrientation = orientation }
-        }
-    }
-    /// How thick that thread is — the other half of the same choice, and the only other thing the
-    /// app can decide about the floating window.
+    /// How thick the floating thread is — the only sizing choice the app exposes.
     @Published var pipThickness = PipWindow.savedThickness {
         didSet {
             let thickness = pipThickness

@@ -43,16 +43,6 @@ final class CameraDisplay: NSObject, ObservableObject {
     /// ratio, so this is what says whether asking for thinner did anything; the HUD shows it.
     var onWindowSizeChange: ((CGSize) -> Void)?
 
-    /// Which way the floating thread lies, chosen in the app because the thread is deliberately too
-    /// thin to touch. Which *side* it ends up on isn't ours — see `PipWindow.Orientation`.
-    var windowOrientation = PipWindow.savedOrientation {
-        didSet {
-            guard windowOrientation != oldValue else { return }
-            PipWindow.savedOrientation = windowOrientation
-            applyWindowSize()
-        }
-    }
-
     /// How thick the thread is drawn. The one number that decides whether the bar reads as a hairline
     /// or as something you can see across the room — and, since its touches belong to iOS, how easy
     /// it is to hit by accident.
@@ -120,8 +110,7 @@ final class CameraDisplay: NSObject, ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let content = PipWindowController()
-        content.preferredContentSize = PipWindow.preferredSize(for: windowOrientation,
-                                                               thickness: windowThickness)
+        content.preferredContentSize = PipWindow.preferredSize(thickness: windowThickness)
         content.onSizeChange = { [weak self] size in self?.onWindowSizeChange?(size) }
         let source = AVPictureInPictureController.ContentSource(activeVideoCallSourceView: sourceView,
                                                                 contentViewController: content)
@@ -181,8 +170,7 @@ final class CameraDisplay: NSObject, ObservableObject {
     /// undocumented; if it doesn't, the size still lands the next time PiP opens — which is the usual
     /// case anyway, since the settings panel is only reachable with the app open.
     private func applyWindowSize() {
-        pipContent?.preferredContentSize = PipWindow.preferredSize(for: windowOrientation,
-                                                                   thickness: windowThickness)
+        pipContent?.preferredContentSize = PipWindow.preferredSize(thickness: windowThickness)
     }
 
     // MARK: - Stash (the window swiped into the screen edge)

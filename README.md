@@ -95,10 +95,8 @@ it. So "you shouldn't be able to grab the thread" is not an API call, it's a wid
 be narrower than a fingertip, and to make sure the touches that do land change nothing — a tap's
 restore is refused, and a swipe into the edge is undone (below).
 
-A bar that wide can only be thrown at the top or the bottom of the screen. Parking it at a side is
-the same thread stood on its end, so it's a swap of the two numbers — and since iOS never tells us
-where the user dropped the window, the choice can't follow the throw: it's a picker in the open app
-(`PipWindow.Orientation`, remembered in `UserDefaults`), applied when PiP next opens.
+The floating bar uses one fixed portrait ratio. iOS remembers where the user places it; the app only
+lets the user adjust thickness, which is applied when PiP next opens.
 
 ### The window must not be left in the wall
 
