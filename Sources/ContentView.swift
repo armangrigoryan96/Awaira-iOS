@@ -44,6 +44,8 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { mobileTabBar }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
+            // The floating bar is always vertical now; the orientation choice was removed.
+            detector.pipOrientation = .vertical
             applyTiming()
         }
         // The setting is live: moving the slider mid-touch changes when this touch escalates,
@@ -92,12 +94,6 @@ struct ContentView: View {
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
-        .overlay(alignment: .center) {
-            Image(systemName: detector.connected ? "eye.slash.fill" : "camera.fill")
-                .font(.system(size: 82, weight: .thin))
-                .foregroundStyle(.white.opacity(0.06))
-                .accessibilityHidden(true)
-        }
     }
 
     private func applyTiming() {
@@ -381,7 +377,6 @@ struct ContentView: View {
 
     private var settingsPanel: some View {
         VStack(spacing: 18) {
-            orientationPicker
             barThicknessSlider
             buzzDelaySlider
             Button {
