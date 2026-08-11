@@ -25,7 +25,8 @@ final class MobileTrialManager: ObservableObject {
             request.httpMethod = "POST"
             request.timeoutInterval = 12
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: ["device": deviceID])
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["device": deviceID,
+                                                                             "platform": "ios"])
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw URLError(.badServerResponse)
