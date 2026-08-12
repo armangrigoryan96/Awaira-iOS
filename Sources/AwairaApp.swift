@@ -6,6 +6,7 @@ struct AwairaApp: App {
     /// hides the full desktop-equivalent onboarding from an existing iPhone install.
     @AppStorage("awairaOnboardingVersion") private var onboardingVersion = 0
     @StateObject private var trial = MobileTrialManager()
+    @StateObject private var license = MobileLicenseManager()
 
     private var isUITest: Bool {
         ProcessInfo.processInfo.arguments.contains("-UITest")
@@ -14,23 +15,39 @@ struct AwairaApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if onboardingVersion >= 3 || isUITest {
-                    if case .expired = trial.state, !isUITest {
-                        MobileTrialExpiredView()
-                    } else {
-                        ContentView()
-                    }
+                if isUITest {
+                    ContentView().environmentObject(license)
+                } else if onboardingVersion >= 3 {
+                    accessGate
                 } else {
                     IPhoneOnboardingView {
                         onboardingVersion = 3
-                        Task { await trial.resolve() }
+                        Task { await resolveAccess() }
                     }
                 }
             }
                 .preferredColorScheme(.dark)
                 .task {
-                    if onboardingVersion >= 3 && !isUITest { await trial.resolve() }
+                    if onboardingVersion >= 3 && !isUITest { await resolveAccess() }
                 }
         }
+    }
+
+    @ViewBuilder private var accessGate: some View {
+        if case .unresolved = trial.state {
+            MobileAccessCheckingView()
+        } else if case .unresolved = license.state {
+            MobileAccessCheckingView()
+        } else if trial.isActive || license.isValid {
+            ContentView().environmentObject(license)
+        } else {
+            MobileLicenseEntryView().environmentObject(license)
+        }
+    }
+
+    private func resolveAccess() async {
+        async let trialDone: Void = trial.resolve()
+        async let licenseDone: Void = license.resolve()
+        _ = await (trialDone, licenseDone)
     }
 }

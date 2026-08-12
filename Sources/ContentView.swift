@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var detector = Detector()
     @StateObject private var settings = AppSettings()
+    @EnvironmentObject private var license: MobileLicenseManager
     /// The settings panel is folded away by default. The camera is used only for on-device
     /// detection; its picture is deliberately never shown in the app.
     @State private var showSettings = false
@@ -424,6 +425,7 @@ struct ContentView: View {
                 alertToggles
                 barThicknessSlider
                 buzzDelaySlider
+                licenseManagement
                 Button {
                     // The app root observes this versioned key and returns to the full onboarding
                     // without deleting the user's stats, settings, or read articles.
@@ -445,6 +447,43 @@ struct ContentView: View {
             .padding(22)
             .transition(.scale(scale: 0.94).combined(with: .opacity))
         }
+    }
+
+    private var licenseManagement: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("licence")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
+            if case .valid(let plan, let expires) = license.state {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Awaira \(plan.capitalized)")
+                            .font(.subheadline.weight(.semibold))
+                        Text(licenceExpiry(expires, plan: plan))
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    Spacer()
+                    if license.checking { ProgressView().tint(.mint).scaleEffect(0.8) }
+                }
+                HStack(spacing: 14) {
+                    Button("Refresh") { Task { await license.recheck() } }
+                        .disabled(license.checking)
+                    Button("Remove licence") { license.removeLicense() }
+                        .foregroundStyle(.red.opacity(0.95))
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .tint(.mint)
+            }
+        }
+    }
+
+    private func licenceExpiry(_ expires: Date?, plan: String) -> String {
+        guard let expires, plan.lowercased() != "lifetime" else { return "Active on this iPhone" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return "Renews \(formatter.string(from: expires))"
     }
 
     /// The three cues for a lingering hand. Each is an independent checkbox; any combination
