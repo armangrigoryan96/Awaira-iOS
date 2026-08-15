@@ -26,7 +26,6 @@ struct AwairaApp: App {
                     }
                 }
             }
-                .preferredColorScheme(.dark)
                 .task {
                     if onboardingVersion >= 3 && !isUITest { await resolveAccess() }
                 }

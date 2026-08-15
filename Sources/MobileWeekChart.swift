@@ -40,15 +40,15 @@ struct MobileWeekChart: View {
                 VStack(spacing: 6) {
                     Text(label(v))
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.68))
+                        .foregroundStyle(.secondary)
                         .frame(height: 12)
                     Capsule()
-                        .fill(day.id == days.last?.id ? Color.mint : Color.white.opacity(0.28))
+                        .fill(day.id == days.last?.id ? Color.indigo : Color.secondary.opacity(0.32))
                         .frame(height: max(5, 76 * CGFloat(v) / CGFloat(maximum)))
                         .frame(maxHeight: 76, alignment: .bottom)
                     Text(Self.dayFormatter.string(from: day.date))
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.52))
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }

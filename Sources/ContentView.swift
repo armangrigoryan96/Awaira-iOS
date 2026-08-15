@@ -1,108 +1,197 @@
 import SwiftUI
 
+/// The main app surface deliberately leans on iOS navigation, lists, and controls. Detection
+/// stays visually quiet so the information people need is easy to scan at a glance.
 struct ContentView: View {
     @StateObject private var detector = Detector()
     @StateObject private var settings = AppSettings()
     @EnvironmentObject private var license: MobileLicenseManager
-    /// The settings panel is folded away by default. The camera is used only for on-device
-    /// detection; its picture is deliberately never shown in the app.
     @State private var showSettings = false
-    /// The camera is deliberately opt-in. First launch shows a privacy-first onboarding flow, and
-    /// arriving here still does not trigger iOS's permission sheet until this is set by the user.
     @State private var cameraRequested = false
     @State private var selectedTab: MobileAppTab = .dashboard
-    /// Whether the weekly chart shows raw daily totals or the per-hour rate.
     @State private var weekMode: WeekChartMode = .total
 
-    /// The three independent "when a hand lingers" cues, each switched on or off by the user.
-    /// Vibrate and voice are applied to the detector; blur is applied to the overlay in `body`.
     @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
     @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
     @AppStorage("mobileBlurEnabled") private var blurEnabled = true
 
-    /// UI tests run without a camera (the simulator has none), so they launch with `-UITest` and
-    /// the session is never started — the HUD and overlays still render.
     private var isUITest: Bool { ProcessInfo.processInfo.arguments.contains("-UITest") }
 
     var body: some View {
         ZStack {
-            trackingBackground
+            TabView(selection: $selectedTab) {
+                dashboard
+                    .tabItem { Label("Today", systemImage: "house") }
+                    .tag(MobileAppTab.dashboard)
 
-            // PiP needs a source view in the hierarchy, but this app intentionally never displays
-            // the front-camera image. The view remains practically transparent solely as the
-            // system source for the blank PiP helper window.
+                MobileInsightsView(detector: detector)
+                    .tabItem { Label("Insights", systemImage: "chart.bar") }
+                    .tag(MobileAppTab.insights)
+
+                MobileLearnLibrary()
+                    .tabItem { Label("Learn", systemImage: "book.closed") }
+                    .tag(MobileAppTab.learn)
+            }
+            .tint(.indigo)
+
+            // The source view is present only to support the system PiP window. It never exposes
+            // a camera frame in Awaira's interface.
             CameraDisplayView(display: detector.display, showsVideo: false)
                 .ignoresSafeArea()
                 .opacity(0.001)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
-            switch selectedTab {
-            case .dashboard: hud
-            case .learn: MobileLearnLibrary()
-            }
-
-            if selectedTab == .dashboard && !cameraRequested && !isUITest {
-                cameraStartCard
-            }
             DimOverlay(active: blurEnabled && detector.touchLevel >= 3)
             TouchBorder(level: detector.touchLevel)
         }
-        .statusBarHidden()
-        .safeAreaInset(edge: .bottom, spacing: 0) { mobileTabBar }
+        .sheet(isPresented: $showSettings) {
+            MobileSettingsView(detector: detector,
+                               settings: settings,
+                               license: license,
+                               vibrateEnabled: $vibrateEnabled,
+                               voiceEnabled: $voiceEnabled,
+                               blurEnabled: $blurEnabled)
+        }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
             applyTiming()
             applyAlerts()
         }
-        // The setting is live: moving the slider mid-touch changes when this touch escalates,
-        // because `DetectionCore` compares the elapsed time against the current config every frame.
         .onChange(of: settings.buzzAfter) { applyTiming() }
         .onChange(of: vibrateEnabled) { applyAlerts() }
         .onChange(of: voiceEnabled) { applyAlerts() }
         .onChange(of: detector.touchLevel) { level in
-            // Desktop Awaira makes one gentle sound at the start of a touch. This is local iOS
-            // system audio, so it needs no permission and never records anything.
             if level == 1 { TouchSound.play() }
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
-    private var mobileTabBar: some View {
-        HStack(spacing: 0) {
-            mobileTabButton(.dashboard, title: "Dashboard", icon: "chart.bar.fill")
-            mobileTabButton(.learn, title: "Learn", icon: "book.closed.fill")
-        }
-        .padding(.top, 9)
-        .padding(.bottom, 8)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.10)).frame(height: 1) }
-    }
+    private var dashboard: some View {
+        NavigationStack {
+            List {
+                if let errorText = detector.errorText {
+                    Section {
+                        Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
 
-    private func mobileTabButton(_ tab: MobileAppTab, title: String, icon: String) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.18)) { selectedTab = tab }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 16, weight: .semibold))
-                Text(title).font(.caption2.weight(.semibold))
+                Section {
+                    if !cameraRequested && !isUITest {
+                        cameraStartRow
+                    } else {
+                        Label(status, systemImage: statusSymbol)
+                            .foregroundStyle(statusColor)
+                            .accessibilityIdentifier("statusLine")
+                    }
+                } footer: {
+                    Text("Camera frames are processed live on this iPhone and are never recorded or uploaded.")
+                }
+
+                Section("Today") {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Today: \(detector.count)")
+                            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .accessibilityIdentifier("todayCount")
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(String(format: "%.1f", todayRate))
+                                .font(.title2.weight(.semibold))
+                                .monospacedDigit()
+                            Text("per tracked hour")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(todayInsight)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("This week") {
+                    HStack(spacing: 0) {
+                        stat(value: "\(detector.weeklyTotal)", label: "interruptions")
+                        Divider().frame(height: 42)
+                        stat(value: String(format: "%.1f", detector.weeklyRate), label: "per hour")
+                        Divider().frame(height: 42)
+                        stat(value: trackedTime, label: "tracked today")
+                    }
+                    .padding(.vertical, 4)
+
+                    Picker("Chart", selection: $weekMode) {
+                        ForEach(WeekChartMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("weekModePicker")
+
+                    MobileWeekChart(days: detector.week, mode: weekMode)
+                        .frame(height: 132)
+                        .padding(.vertical, 4)
+
+                    Text(weeklyTrendText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Recent activity") {
+                    LabeledContent("Last interruption", value: lastActivityText)
+                }
+
+                Section {
+                    NavigationLink {
+                        MobileInsightsView(detector: detector)
+                    } label: {
+                        Label("View patterns and insights", systemImage: "chart.xyaxis.line")
+                    }
+                }
             }
-            .foregroundStyle(selectedTab == tab ? Color.mint : .white.opacity(0.56))
-            .frame(maxWidth: .infinity)
+            .listStyle(.insetGrouped)
+            .navigationTitle(greeting)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings", systemImage: "gearshape") { showSettings = true }
+                        .accessibilityIdentifier("settingsToggle")
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 
-    private var trackingBackground: some View {
-        LinearGradient(
-            colors: [Color(red: 0.025, green: 0.06, blue: 0.09),
-                     Color(red: 0.04, green: 0.12, blue: 0.14),
-                     Color(red: 0.015, green: 0.03, blue: 0.05)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+    private var cameraStartRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Camera is off", systemImage: "camera")
+                .font(.headline)
+            Text("Start it when you are ready. Awaira looks only for hand-to-face movement; video never leaves this iPhone.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Start camera", systemImage: "play.fill", action: startCamera)
+                .buttonStyle(.borderedProminent)
+                .tint(.indigo)
+        }
+        .padding(.vertical, 4)
+        .accessibilityIdentifier("cameraStartCard")
+    }
+
+    private func stat(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.headline.weight(.semibold))
+                .monospacedDigit()
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+    }
+
+    private func startCamera() {
+        cameraRequested = true
+        applyTiming()
+        detector.start()
     }
 
     private func applyTiming() {
@@ -113,250 +202,6 @@ struct ContentView: View {
     private func applyAlerts() {
         detector.vibrateEnabled = vibrateEnabled
         detector.voiceEnabled = voiceEnabled
-    }
-
-    private var cameraStartCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label("Camera is off", systemImage: "camera.fill")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white)
-            Text("When you are ready, Awaira can use the front camera to notice hand-to-face movement. Camera frames stay on this iPhone and are never recorded or uploaded.")
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.72))
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: startCamera) {
-                Label("Start camera", systemImage: "play.fill")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
-        }
-        .padding(22)
-        .frame(maxWidth: 360)
-        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.14), lineWidth: 1)
-        }
-        .padding(24)
-        .accessibilityIdentifier("cameraStartCard")
-    }
-
-    private func startCamera() {
-        cameraRequested = true
-        applyTiming()
-        detector.start()
-    }
-
-    private var hud: some View {
-        ZStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
-                    dashboardHeader
-
-                    if let errorText = detector.errorText {
-                        Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.red.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
-                    }
-
-                    todaySummary
-                    metricGrid
-                    weeklyOverview
-                    activitySummary
-                    privacySummary
-                    MobileInsightsSection(detector: detector)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
-            }
-
-            if showSettings { settingsPopup }
-        }
-        .foregroundStyle(.white)
-        .shadow(radius: 4)
-    }
-
-    private var dashboardHeader: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(greeting)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text(status)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
-                    .accessibilityIdentifier("statusLine")
-            }
-            Spacer()
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { showSettings = true }
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white.opacity(0.82))
-                    .frame(width: 42, height: 42)
-                    .background(.white.opacity(0.09), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settingsToggle")
-        }
-    }
-
-    private var todaySummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .lastTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Today")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.65))
-                    Text("\(detector.count)")
-                        .font(.system(size: 52, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .accessibilityIdentifier("todayCount")
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("interruptions")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.62))
-                    Text(String(format: "%.1f / hour", todayRate))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.mint)
-                }
-            }
-            Text(todayInsight)
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.68))
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(.mint.opacity(0.22), lineWidth: 1) }
-    }
-
-    private var metricGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            metricCard(icon: "checkmark.shield.fill", value: "\(detector.preventedPulls)", label: "stopped early", tint: .mint,
-                       note: detector.count > 0 ? "\(preventedPercent)% of today’s interruptions" : "Your early releases appear here")
-            metricCard(icon: "hand.raised.fill", value: "\(detector.actualPulls)", label: "lingered contacts", tint: .orange,
-                       note: "Reached the feedback delay")
-            metricCard(icon: "clock.fill", value: trackedTime, label: "time tracked", tint: .cyan,
-                       note: "Camera processing stays on-device")
-            metricCard(icon: "calendar", value: "\(detector.weeklyTotal)", label: "last 7 days", tint: .purple,
-                       note: weeklyTrendText)
-        }
-    }
-
-    private func metricCard(icon: String, value: String, label: String, tint: Color, note: String) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(tint.opacity(0.15), in: Circle())
-            Text(value)
-                .font(.system(size: 25, weight: .bold, design: .rounded))
-                .monospacedDigit()
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.75))
-            Text(note)
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.48))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, minHeight: 144, alignment: .topLeading)
-        .padding(14)
-        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1) }
-    }
-
-    private var weeklyOverview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Weekly overview")
-                    .font(.headline)
-                Spacer()
-                Picker("View", selection: $weekMode) {
-                    ForEach(WeekChartMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-                .accessibilityIdentifier("weekModePicker")
-            }
-
-            // Both headline numbers, always visible: the seven-day total and the per-hour rate.
-            HStack(spacing: 22) {
-                weeklyStat(value: "\(detector.weeklyTotal)", label: "total")
-                weeklyStat(value: String(format: "%.1f", detector.weeklyRate), label: "per hour")
-            }
-
-            MobileWeekChart(days: detector.week, mode: weekMode)
-                .frame(height: 125)
-            Text(weekMode == .total
-                 ? "Each bar is a day’s hand-to-face interruptions. Stats remain only on this iPhone."
-                 : "Each bar is a day’s interruptions per tracked hour. Stats remain only on this iPhone.")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.50))
-        }
-        .padding(16)
-        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1) }
-    }
-
-    private func weeklyStat(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.mint)
-            Text(label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.white.opacity(0.55))
-        }
-    }
-
-    private var activitySummary: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.title3)
-                .foregroundStyle(.cyan)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Recent activity")
-                    .font(.subheadline.weight(.semibold))
-                Text(lastActivityText)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.58))
-            }
-            Spacer()
-        }
-        .padding(15)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var privacySummary: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "lock.shield.fill")
-                .foregroundStyle(.mint)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Private by design")
-                    .font(.subheadline.weight(.semibold))
-                Text("Camera frames are processed live on this iPhone. Awaira does not record or upload video, images, or your detection history.")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.58))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(15)
-        .background(.mint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var greeting: String {
@@ -370,255 +215,142 @@ struct ContentView: View {
         MobileStatsStore.hourlyRate(interruptions: detector.count, activeSeconds: detector.activeSecondsToday)
     }
 
-    private var preventedPercent: Int {
-        guard detector.count > 0 else { return 0 }
-        return Int((Double(detector.preventedPulls) / Double(detector.count) * 100).rounded())
-    }
-
     private var trackedTime: String {
-        let total = Int(detector.activeSecondsToday.rounded())
-        if total < 60 { return "< 1 min" }
-        if total < 3600 { return "\(total / 60) min" }
-        return String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
+        let seconds = Int(detector.activeSecondsToday.rounded())
+        if seconds < 60 { return "< 1 min" }
+        if seconds < 3600 { return "\(seconds / 60) min" }
+        return String(format: "%dh %02dm", seconds / 3600, (seconds % 3600) / 60)
     }
 
     private var weeklyTrendText: String {
-        guard let improvement = detector.weeklyImprovement, abs(improvement) >= 1 else {
-            return "Your rolling weekly total"
+        guard let change = detector.weeklyImprovement, abs(change) >= 1 else {
+            return "Your rolling seven-day total. Data stays on this iPhone."
         }
-        let percent = Int(abs(improvement).rounded())
-        return improvement > 0 ? "\(percent)% lower than the prior week" : "\(percent)% higher than the prior week"
+        let amount = Int(abs(change).rounded())
+        return change > 0 ? "\(amount)% lower than the previous week." : "\(amount)% higher than the previous week."
     }
 
     private var todayInsight: String {
-        guard detector.count > 0 else { return "Your activity and weekly trend will build here as you track." }
-        guard detector.preventedPulls > 0 else { return "You are building awareness—every detected moment is useful data." }
-        return "You released \(detector.preventedPulls) hand-to-face moment\(detector.preventedPulls == 1 ? "" : "s") before the feedback delay."
+        guard detector.count > 0 else { return "Your activity will appear here as you use Awaira." }
+        guard detector.preventedPulls > 0 else { return "Every detected moment helps build awareness." }
+        return "You released \(detector.preventedPulls) moment\(detector.preventedPulls == 1 ? "" : "s") before the feedback delay."
     }
 
     private var lastActivityText: String {
-        guard let date = detector.lastDetection else { return "No interruptions logged yet." }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return "Last interruption \(formatter.localizedString(for: date, relativeTo: Date()))."
+        guard let date = detector.lastDetection else { return "No interruptions logged yet" }
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
 
-    // MARK: - Settings
+    private var statusSymbol: String {
+        if detector.errorText != nil { return "exclamationmark.triangle" }
+        if !cameraRequested { return "camera" }
+        if !detector.connected { return "camera.aperture" }
+        return detector.hasFace ? "eye" : "viewfinder"
+    }
 
-    private var settingsPopup: some View {
-        ZStack {
-            Color.black.opacity(0.48)
-                .ignoresSafeArea()
-                .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showSettings = false } }
+    private var statusColor: Color {
+        detector.errorText == nil ? .secondary : .red
+    }
 
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Settings").font(.headline)
-                    Spacer()
-                    Button { withAnimation(.easeOut(duration: 0.2)) { showSettings = false } } label: {
-                        Image(systemName: "xmark").font(.subheadline.weight(.bold)).frame(width: 32, height: 32)
+    private enum MobileAppTab { case dashboard, insights, learn }
+}
+
+private struct MobileSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var detector: Detector
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var license: MobileLicenseManager
+    @Binding var vibrateEnabled: Bool
+    @Binding var voiceEnabled: Bool
+    @Binding var blurEnabled: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("When a hand lingers") {
+                    Toggle("Vibrate", isOn: $vibrateEnabled)
+                        .accessibilityIdentifier("alertToggle.Vibrate")
+                    Toggle("Voice", isOn: $voiceEnabled)
+                        .accessibilityIdentifier("alertToggle.Voice")
+                    Toggle("Blur screen", isOn: $blurEnabled)
+                        .accessibilityIdentifier("alertToggle.Blur screen")
+                } footer: {
+                    Text("Choose the cues that feel helpful. You can change them at any time.")
+                }
+
+                Section("Timing") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Floating bar thickness", value: thicknessValueLabel)
+                        Slider(value: $detector.pipThickness,
+                               in: PipWindow.thicknessRange,
+                               step: PipWindow.thicknessStep)
+                            .accessibilityIdentifier("barThicknessSlider")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .background(.white.opacity(0.08), in: Circle())
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Buzz after", value: String(format: "%.1f seconds", settings.buzzAfter))
+                        Slider(value: $settings.buzzAfter,
+                               in: AppSettings.buzzAfterRange,
+                               step: AppSettings.buzzAfterStep)
+                            .accessibilityIdentifier("buzzDelaySlider")
+                    }
                 }
-                alertToggles
-                barThicknessSlider
-                buzzDelaySlider
-                licenseManagement
-                Button {
-                    // The app root observes this versioned key and returns to the full onboarding
-                    // without deleting the user's stats, settings, or read articles.
-                    UserDefaults.standard.set(0, forKey: "awairaOnboardingVersion")
-                    showSettings = false
-                } label: {
-                    Label("Replay onboarding", systemImage: "arrow.counterclockwise")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+
+                licenceSection
+
+                Section {
+                    Button("Replay onboarding", systemImage: "arrow.counterclockwise") {
+                        UserDefaults.standard.set(0, forKey: "awairaOnboardingVersion")
+                        dismiss()
+                    }
                 }
-                .buttonStyle(.bordered)
-                .tint(.mint)
             }
-            .padding(20)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(.black.opacity(0.93), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.white.opacity(0.14), lineWidth: 1) }
-            .padding(22)
-            .transition(.scale(scale: 0.94).combined(with: .opacity))
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
+        .tint(.indigo)
     }
 
-    private var licenseManagement: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text("licence")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
+    @ViewBuilder private var licenceSection: some View {
+        Section("Licence") {
             if case .valid(let plan, let expires) = license.state {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Awaira \(plan.capitalized)")
-                            .font(.subheadline.weight(.semibold))
-                        Text(licenceExpiry(expires, plan: plan))
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                    Spacer()
-                    if license.checking { ProgressView().tint(.mint).scaleEffect(0.8) }
-                }
-                HStack(spacing: 14) {
-                    Button("Refresh") { Task { await license.recheck() } }
-                        .disabled(license.checking)
-                    Button("Remove licence") { license.removeLicense() }
-                        .foregroundStyle(.red.opacity(0.95))
-                }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.bordered)
-                .tint(.mint)
+                LabeledContent("Plan", value: plan.capitalized)
+                LabeledContent("Status", value: expiryText(expires, plan: plan))
+                Button("Refresh licence") { Task { await license.recheck() } }
+                    .disabled(license.checking)
+                Button("Remove licence", role: .destructive) { license.removeLicense() }
+            } else {
+                Text("No active licence on this iPhone.")
+                    .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private func licenceExpiry(_ expires: Date?, plan: String) -> String {
-        guard let expires, plan.lowercased() != "lifetime" else { return "Active on this iPhone" }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return "Renews \(formatter.string(from: expires))"
-    }
-
-    /// The three cues for a lingering hand. Each is an independent checkbox; any combination
-    /// (including none) is allowed, mirroring the desktop app's sound / tone / effect switches.
-    private var alertToggles: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("when a hand lingers")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
-            alertToggleRow(icon: "iphone.radiowaves.left.and.right",
-                           title: "Vibrate",
-                           subtitle: "Buzz while the hand stays near your face.",
-                           isOn: $vibrateEnabled)
-            alertToggleRow(icon: "waveform",
-                           title: "Voice",
-                           subtitle: "Play a soft calming tone until the hand comes down.",
-                           isOn: $voiceEnabled)
-            alertToggleRow(icon: "rectangle.on.rectangle",
-                           title: "Blur screen",
-                           subtitle: "Softly blur the screen with an encouraging line.",
-                           isOn: $blurEnabled)
-        }
-    }
-
-    private func alertToggleRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
-        Button {
-            isOn.wrappedValue.toggle()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundStyle(isOn.wrappedValue ? .mint : .white.opacity(0.4))
-                    .frame(width: 26)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isOn.wrappedValue ? .mint : .white.opacity(0.3))
-            }
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("alertToggle.\(title)")
-    }
-
-    /// How thick the floating bar is. What travels to AVKit is only the ratio against
-    /// `PipWindow.length`, and AVKit picks its own scale from there — so the number on the slider is
-    /// an ask, not a measurement. The measurement is next to it: the height the window actually came
-    /// out at last time it was up, which is also where the system's floor becomes visible (keep
-    /// asking thinner and at some point it stops moving).
-    private var barThicknessSlider: some View {
-        settingRow("bar thickness", value: thicknessValueLabel) {
-            Slider(value: $detector.pipThickness,
-                   in: PipWindow.thicknessRange,
-                   step: PipWindow.thicknessStep)
-                .tint(.green)
-                .accessibilityIdentifier("barThicknessSlider")
+        } footer: {
+            Text("A licence can be active on one device at a time.")
         }
     }
 
     private var thicknessValueLabel: String {
-        let asked = String(format: "%.0f", detector.pipThickness)
-        // The bar's short side, whichever way it's lying.
-        guard let size = detector.pipWindowSize else { return asked }
-        return asked + String(format: " → %.0f pt", min(size.width, size.height))
+        let requested = String(format: "%.0f pt", detector.pipThickness)
+        guard let size = detector.pipWindowSize else { return requested }
+        return requested + String(format: " (%.0f pt shown)", min(size.width, size.height))
     }
 
-    /// How long a hand may stay on the face before the app reacts — the blur while it's open, the
-    /// buzz while it's minimized.
-    private var buzzDelaySlider: some View {
-        settingRow("buzz after", value: String(format: "%.1f s", settings.buzzAfter)) {
-            Slider(value: $settings.buzzAfter,
-                   in: AppSettings.buzzAfterRange,
-                   step: AppSettings.buzzAfterStep)
-                .tint(.red)
-                .accessibilityIdentifier("buzzDelaySlider")
-        }
-    }
-
-    private func settingRow<Control: View>(_ title: String,
-                                           value: String?,
-                                           @ViewBuilder control: () -> Control) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                Spacer()
-                if let value {
-                    Text(value)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-            }
-            control()
-        }
-    }
-
-    private var status: String {
-        if detector.errorText != nil { return "camera unavailable" }
-        // A flash, normally: the window is pulled straight back out of the screen edge, because
-        // stashed there iOS won't allow the camera to run at all.
-        if detector.stashed         { return "window went into the edge — pulling it back out" }
-        if !cameraRequested         { return "camera is off" }
-        if !detector.connected      { return "starting the camera…" }
-        if detector.touching        { return "hand on face — level \(detector.touchLevel)" }
-        // iOS only lets the camera run while the app is visible, so leaving the app has to mean
-        // shrinking into the floating window rather than closing it.
-        return detector.hasFace ? "watching privately on this iPhone"
-                                : "looking for a face"
+    private func expiryText(_ expires: Date?, plan: String) -> String {
+        guard let expires, plan.lowercased() != "lifetime" else { return "Active" }
+        return "Renews \(expires.formatted(date: .abbreviated, time: .omitted))"
     }
 }
 
-private enum MobileAppTab { case dashboard, learn }
-
-/// The desktop app uses a warm red-orange screen edge on contact. On iPhone it is drawn inside
-/// Awaira's own window; iOS does not permit an app to draw over other apps.
 private struct TouchBorder: View {
     let level: Int
 
     var body: some View {
         if level > 0 {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .strokeBorder(level >= 3 ? Color.red : Color(red: 1, green: 0.34, blue: 0.18),
+                .strokeBorder(level >= 3 ? Color.red : Color.orange,
                               lineWidth: level >= 3 ? 10 : 7)
-                .shadow(color: .red.opacity(level >= 3 ? 0.9 : 0.55), radius: 20)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .transition(.opacity)
