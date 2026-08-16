@@ -58,10 +58,10 @@ struct ContentView: View {
             applyTiming()
             applyAlerts()
         }
-        .onChange(of: settings.buzzAfter) { applyTiming() }
-        .onChange(of: vibrateEnabled) { applyAlerts() }
-        .onChange(of: voiceEnabled) { applyAlerts() }
-        .onChange(of: detector.touchLevel) { level in
+        .onChange(of: settings.buzzAfter) { _, _ in applyTiming() }
+        .onChange(of: vibrateEnabled) { _, _ in applyAlerts() }
+        .onChange(of: voiceEnabled) { _, _ in applyAlerts() }
+        .onChange(of: detector.touchLevel) { _, level in
             if level == 1 { TouchSound.play() }
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -252,6 +252,15 @@ struct ContentView: View {
         detector.errorText == nil ? .secondary : .red
     }
 
+    private var status: String {
+        if detector.errorText != nil { return "Camera unavailable" }
+        if detector.stashed { return "Camera window is returning to the screen" }
+        if !cameraRequested { return "Camera is off" }
+        if !detector.connected { return "Starting camera…" }
+        if detector.touching { return "Hand near face" }
+        return detector.hasFace ? "Watching privately on this iPhone" : "Looking for a face"
+    }
+
     private enum MobileAppTab { case dashboard, insights, learn }
 }
 
@@ -267,13 +276,15 @@ private struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("When a hand lingers") {
+                Section {
                     Toggle("Vibrate", isOn: $vibrateEnabled)
                         .accessibilityIdentifier("alertToggle.Vibrate")
                     Toggle("Voice", isOn: $voiceEnabled)
                         .accessibilityIdentifier("alertToggle.Voice")
                     Toggle("Blur screen", isOn: $blurEnabled)
                         .accessibilityIdentifier("alertToggle.Blur screen")
+                } header: {
+                    Text("When a hand lingers")
                 } footer: {
                     Text("Choose the cues that feel helpful. You can change them at any time.")
                 }
@@ -315,7 +326,7 @@ private struct MobileSettingsView: View {
     }
 
     @ViewBuilder private var licenceSection: some View {
-        Section("Licence") {
+        Section {
             if case .valid(let plan, let expires) = license.state {
                 LabeledContent("Plan", value: plan.capitalized)
                 LabeledContent("Status", value: expiryText(expires, plan: plan))
@@ -326,6 +337,8 @@ private struct MobileSettingsView: View {
                 Text("No active licence on this iPhone.")
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            Text("Licence")
         } footer: {
             Text("A licence can be active on one device at a time.")
         }

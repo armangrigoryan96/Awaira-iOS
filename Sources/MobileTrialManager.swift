@@ -250,16 +250,16 @@ struct MobileLicenseEntryView: View {
         VStack(spacing: 18) {
             Image(systemName: "key.fill")
                 .font(.system(size: 36, weight: .medium))
-                .foregroundStyle(.mint)
+                .foregroundStyle(.indigo)
                 .frame(width: 76, height: 76)
-                .background(.mint.opacity(0.14), in: Circle())
+                .background(.indigo.opacity(0.12), in: Circle())
 
             Text("Unlock Awaira")
                 .font(.system(size: 29, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
             Text("Your trial has ended. Enter the licence key from your purchase email to continue.")
                 .font(.body)
-                .foregroundStyle(.white.opacity(0.66))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -274,8 +274,8 @@ struct MobileLicenseEntryView: View {
                 .onSubmit(activate)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 16)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1) }
+                .background(.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.separator, lineWidth: 1) }
 
             if let message = errorMessage {
                 Text(message)
@@ -291,29 +291,28 @@ struct MobileLicenseEntryView: View {
                     else { Text("Activate licence") }
                 }
                 .font(.body.weight(.bold))
-                .foregroundStyle(.black.opacity(0.84))
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
-                .background(.mint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(.indigo, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .disabled(license.checking || keyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             Link("Buy a licence", destination: checkoutURL)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.mint)
+                .foregroundStyle(.indigo)
                 .padding(.top, 2)
 
             Text("A licence is activated on one device at a time. You can remove it in Settings to transfer it later.")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.44))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(32)
         .frame(maxWidth: 440)
-        .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.025, green: 0.06, blue: 0.09).ignoresSafeArea())
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .onAppear {
             keyText = license.key ?? ""
             keyFocused = keyText.isEmpty
@@ -341,13 +340,13 @@ struct MobileLicenseEntryView: View {
 struct MobileAccessCheckingView: View {
     var body: some View {
         VStack(spacing: 14) {
-            ProgressView().tint(.mint)
+            ProgressView().tint(.indigo)
             Text("Checking your access…")
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.025, green: 0.06, blue: 0.09).ignoresSafeArea())
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 }
 
@@ -358,18 +357,17 @@ struct MobileTrialExpiredView: View {
         VStack(spacing: 14) {
             Image(systemName: "hourglass")
                 .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(.mint)
+                .foregroundStyle(.indigo)
             Text("Your Awaira trial has ended")
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
             Text("Thanks for giving Awaira a try. Visit awaira.app on your computer to continue with Awaira.")
                 .font(.body)
-                .foregroundStyle(.white.opacity(0.66))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(32)
-        .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.025, green: 0.06, blue: 0.09).ignoresSafeArea())
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 }

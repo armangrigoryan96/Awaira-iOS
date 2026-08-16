@@ -128,7 +128,7 @@ struct MobilePatternInsight: Identifiable {
     private static func hourRange(_ hour: Int) -> String {
         func text(_ value: Int) -> String {
             let h = value % 12 == 0 ? 12 : value % 12
-            return "\(h) \(value < 12 ? \"AM\" : \"PM\")"
+            return "\(h) \(value < 12 ? "AM" : "PM")"
         }
         return "\(text(hour))–\(text((hour + 1) % 24))"
     }

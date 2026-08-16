@@ -18,7 +18,7 @@ struct IPhoneOnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.025, green: 0.06, blue: 0.09).ignoresSafeArea()
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header
@@ -47,7 +47,7 @@ struct IPhoneOnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(onboardingSteps.indices, id: \.self) { stepIndex in
                     Capsule()
-                        .fill(stepIndex == index ? step.accent : .white.opacity(0.16))
+                        .fill(stepIndex == index ? step.accent : Color.secondary.opacity(0.25))
                         .frame(width: stepIndex == index ? 22 : 5, height: 5)
                         .animation(.easeInOut(duration: 0.2), value: index)
                 }
@@ -75,11 +75,11 @@ struct IPhoneOnboardingView: View {
             Text(page.title)
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             Text(page.body)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.secondary)
                 .lineSpacing(3)
             Spacer(minLength: 16)
         }
@@ -96,9 +96,8 @@ struct IPhoneOnboardingView: View {
                 TextField("Please specify", text: $otherSource)
                     .textFieldStyle(.plain)
                     .padding(14)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay { RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.14), lineWidth: 1) }
-                    .foregroundStyle(.white)
+                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
             }
         }
         .padding(.top, 30)
@@ -115,16 +114,16 @@ struct IPhoneOnboardingView: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: selected.contains(option) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(option) ? question.accent : .white.opacity(0.42))
+                                .foregroundStyle(selected.contains(option) ? question.accent : .secondary)
                             Text(option)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(.primary)
                                 .multilineTextAlignment(.leading)
                             Spacer()
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 15)
-                        .background(selected.contains(option) ? question.accent.opacity(0.15) : .white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
-                        .overlay { RoundedRectangle(cornerRadius: 14).stroke(selected.contains(option) ? question.accent.opacity(0.65) : .white.opacity(0.11), lineWidth: 1) }
+                        .background(selected.contains(option) ? question.accent.opacity(0.12) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(selected.contains(option) ? question.accent.opacity(0.65) : Color(uiColor: .separator), lineWidth: 1) }
                     }
                     .buttonStyle(.plain)
                 }
@@ -132,7 +131,7 @@ struct IPhoneOnboardingView: View {
             if let footer = question.footer {
                 Text(footer)
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.secondary)
                     .lineSpacing(2)
                     .padding(.top, 6)
             }
@@ -166,24 +165,24 @@ struct IPhoneOnboardingView: View {
             if index > 0 {
                 Button("Back") { withAnimation(.easeInOut(duration: 0.2)) { index -= 1 } }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 24)
         .padding(.top, 14)
         .padding(.bottom, 26)
-        .background(.black.opacity(0.72))
+        .background(.bar)
     }
 
     private func stepTitle(_ title: String, helper: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             if !helper.isEmpty {
                 Text(helper)
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.66))
+                    .foregroundStyle(.secondary)
                     .lineSpacing(3)
             }
         }
@@ -195,11 +194,11 @@ struct IPhoneOnboardingView: View {
                 Button { select(option) } label: {
                     Text(option)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .padding(.horizontal, 10)
-                        .background(selected == option ? step.accent.opacity(0.18) : .white.opacity(0.055), in: RoundedRectangle(cornerRadius: 13))
-                        .overlay { RoundedRectangle(cornerRadius: 13).stroke(selected == option ? step.accent.opacity(0.7) : .white.opacity(0.11), lineWidth: 1) }
+                        .background(selected == option ? step.accent.opacity(0.12) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(selected == option ? step.accent.opacity(0.7) : Color(uiColor: .separator), lineWidth: 1) }
                 }
                 .buttonStyle(.plain)
             }
@@ -214,13 +213,13 @@ struct IPhoneOnboardingView: View {
                 .frame(width: 38, height: 38)
                 .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.body.weight(.semibold)).foregroundStyle(.white)
-                Text(detail).font(.footnote).foregroundStyle(.white.opacity(0.62)).lineSpacing(2)
+                Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                Text(detail).font(.footnote).foregroundStyle(.secondary).lineSpacing(2)
             }
         }
         .padding(16)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 15))
-        .overlay { RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.1), lineWidth: 1) }
+        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
     }
 
     private func nudgeToggle(symbol: String, title: String, detail: String, color: Color,
@@ -229,21 +228,21 @@ struct IPhoneOnboardingView: View {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: symbol)
                     .font(.title3)
-                    .foregroundStyle(isOn.wrappedValue ? color : .white.opacity(0.38))
+                    .foregroundStyle(isOn.wrappedValue ? color : .secondary)
                     .frame(width: 38, height: 38)
                     .background(color.opacity(isOn.wrappedValue ? 0.16 : 0.07), in: RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.body.weight(.semibold)).foregroundStyle(.white)
-                    Text(detail).font(.footnote).foregroundStyle(.white.opacity(0.62)).lineSpacing(2)
+                    Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                    Text(detail).font(.footnote).foregroundStyle(.secondary).lineSpacing(2)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(isOn.wrappedValue ? color : .white.opacity(0.3))
+                    .foregroundStyle(isOn.wrappedValue ? color : .secondary)
             }
             .padding(16)
-            .background(.white.opacity(isOn.wrappedValue ? 0.08 : 0.045), in: RoundedRectangle(cornerRadius: 15))
-            .overlay { RoundedRectangle(cornerRadius: 15).stroke(isOn.wrappedValue ? color.opacity(0.45) : .white.opacity(0.1), lineWidth: 1) }
+            .background(isOn.wrappedValue ? color.opacity(0.10) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(isOn.wrappedValue ? color.opacity(0.45) : Color(uiColor: .separator), lineWidth: 1) }
         }
         .buttonStyle(.plain)
     }
@@ -308,7 +307,7 @@ private struct MobileOnboardingIllustration: View {
                     .overlay { Circle().stroke(accent.opacity(0.5), lineWidth: 1.5) }
                 HStack(spacing: 8) {
                     ForEach(0..<4, id: \.self) { index in
-                        Circle().fill(index == 2 ? accent : .white.opacity(0.18)).frame(width: 7, height: 7)
+                        Circle().fill(index == 2 ? accent : Color.secondary.opacity(0.25)).frame(width: 7, height: 7)
                     }
                 }
                 .offset(y: 82)
