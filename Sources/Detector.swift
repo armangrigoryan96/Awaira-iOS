@@ -452,7 +452,7 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
             // Draw on every frame that arrives, so the preview stays as current as the camera allows
             // even when detection is throttled below it. Minimized nothing is drawn at all: the
             // floating window exists only to keep some of the app on screen so iOS permits the
-            // camera, and it is transparent — see `PipWindowController`.
+            // camera, and it draws itself — see `PipWindowController`.
             if !display.isInPictureInPicture { display.enqueue(sampleBuffer) }
             // Throttle to the adaptive target rate — drop frames that arrive too soon.
             let now = CACurrentMediaTime()
@@ -505,10 +505,12 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         if out.didStartTouch { stats.recordDetection(at: wallClockNow) }
         if out.didEndTouch { stats.recordOutcome(sustained: out.touchWasPull, at: wallClockNow) }
         lastLevel = out.level
+        // Minimized, the floating window is the only thing the app can show — so it carries the red
+        // frame's job: red on a touch, bright red once the hand has been there for the set delay.
+        display.showLevel(out.level)
         // The two non-visual cues for a lingering hand, each independent and off unless the user
         // switched it on. They keep going until the hand comes down. Blur is the third cue and is
-        // handled in the view layer where the screen can actually be dimmed — which, minimized, is
-        // nowhere: the floating window is transparent, so these two are all that reaches the user.
+        // handled in the view layer where the screen can actually be dimmed.
         if out.level >= 3 {
             if vibrateEnabled { Haptics.startSustained() } else { Haptics.stopSustained() }
             if voiceEnabled { CalmingTone.startSustained() } else { CalmingTone.stopSustained() }

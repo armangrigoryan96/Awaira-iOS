@@ -9,7 +9,7 @@ reactions:
 | | touch registers | hand still there at the set delay |
 |---|---|---|
 | **app open** | the head-zone frame turns red | the screen blurs |
-| **minimized (PiP)** | nothing on screen — the floating window is invisible | the phone buzzes (and the tone plays, if switched on) |
+| **minimized (PiP)** | the floating bar turns red | it goes bright red and the phone buzzes |
 
 The delay is 3 s unless you change it — there's a **settings** panel at the bottom of the screen
 with the floating bar's orientation and thickness, and how long a hand may stay before the app
@@ -29,7 +29,7 @@ Sources/
 ├── ContentView.swift      — preview + HUD + overlays + the settings panel
 ├── AppSettings.swift      — the buzz delay, remembered across launches
 ├── CameraDisplay.swift    — the preview layer + Picture-in-Picture (detection while minimized)
-├── PipWindow.swift        — the floating window: a thin, transparent sliver that shows nothing;
+├── PipWindow.swift        — the floating window: a thin bar of colour, black → red → bright red;
 │                            its orientation and thickness live here too
 ├── StashPolicy.swift      — how hard to fight a window swiped into the screen edge
 ├── Detector.swift         — capture session + Vision requests; holds no detection logic
@@ -65,16 +65,13 @@ falls back to the system vibration, since `UIFeedbackGenerator` is foreground-on
 That also means the preview is an `AVSampleBufferDisplayLayer` we feed by hand, rather than an
 `AVCaptureVideoPreviewLayer` — only the former can be carried into PiP.
 
-### The window is a formality, not a preview
+### The window is a bar, not a preview
 
 The floating window is not there to be looked at; it's there because iOS only permits the camera
-while some of the app's pixels are on screen. So it shows no video, no numbers and no colour —
-[PipWindow](Sources/PipWindow.swift) is transparent in every state, and nothing is enqueued into PiP
-at all. It used to carry the red frame's job (black → red → bright red at the three-second mark),
-but that put a bar on top of whatever the user was doing; minimized, the buzz and the tone are the
-reactions now, and the red frame and blur stay with the open app. Its own view is `.clear`, and
-`clearBackdrop()` clears the containers AVKit wraps it in — anything the system paints in its own
-process is beyond reach, so a faint outline while dragging is possible.
+while some of the app's pixels are on screen. So it shows no video and no numbers — it's a bar of
+colour ([PipWindow](Sources/PipWindow.swift)) that carries the job the red frame does in the open
+app: black while nothing is happening, red on a touch, bright red at the three-second mark, where
+the buzz starts too. Nothing is enqueued into PiP at all; the window draws itself.
 
 Getting it *small* took the window type, not the content. With a sample-buffer content source the
 window's proportions don't follow the frames — a 240×30 strip still produced a tall portrait window
@@ -129,9 +126,9 @@ Coming back needs one more thing: while the app is stashed, video decoding isn't
 renderer sets `requiresFlushToResumeDecoding` and silently drops every frame until it's flushed.
 Without that flush the window would stay black after being pulled out, camera or no camera.
 
-And the practical answer to *"I want it out of my way"* is not the wall at all — the window shows
-nothing to begin with, and parking it against an edge without letting go into the stash keeps the
-invisible sliver out from under your fingers while the camera is still allowed to run.
+And the practical answer to *"I want it out of my way"* is not the wall at all — it's the thread the
+window already is. Park it against an edge without letting go into the stash, and it's as invisible
+as a stashed window, but the camera is still allowed to run.
 
 > The `voip` background mode is honest for a camera app that must stay live, but App Store review
 > associates it with calling apps. On your own device via Xcode it just works; before submitting,
@@ -169,10 +166,9 @@ run destination and hit ▶ — the app needs a signing team either way.
 Allow camera access, and you should see yourself, a green box tracking your head, the hand skeleton
 when a hand comes into view, the box turning red and the counter ticking on a touch, and the screen
 blurring if the hand stays for the set delay (3 s out of the box). Then swipe home: the app shrinks
-into a floating window that keeps detecting and shows nothing at all — the reaction you get there is
-the buzz, from the delay onwards for as long as the hand stays. The window is invisible but still
-draggable; swipe it into the screen edge and it comes straight back out, because it has to count as
-on screen for the camera to be allowed at all.
+into a small black bar that keeps detecting — it goes red the moment a hand reaches your face,
+bright red at the delay, and buzzes from then on for as long as the hand stays. Swipe that bar into the screen edge
+and it comes straight back out — it has to stay visible for the camera to be allowed at all.
 
 ## Parity with the Mac
 

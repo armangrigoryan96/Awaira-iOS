@@ -50,15 +50,27 @@ final class PipWindowTests: XCTestCase {
         XCTAssertEqual(PipWindow.preferredSize().width, 24)
     }
 
-    /// The window used to be the app's stand-in for the red frame — black, then red, then bright red
-    /// on top of whatever the user was doing. It shows nothing now; the buzz and the tone are what
-    /// reach a minimized user. Nothing being drawn is the whole point, so it is worth a test.
-    @MainActor
-    func testTheWindowShowsNothing() {
-        let controller = PipWindowController()
-        controller.loadViewIfNeeded()
-        XCTAssertEqual(controller.view.backgroundColor, .clear,
-                       "the floating window has to be invisible in every state")
-        XCTAssertFalse(controller.view.isOpaque)
+    func testTheBarCarriesTheRedFramesJob() {
+        // Away: nothing to report, and black is what makes the window easy to ignore.
+        XCTAssertEqual(PipWindow.tint(forLevel: 0), .idle)
+        // A touch has to be visible in the window, not just felt three seconds later.
+        XCTAssertEqual(PipWindow.tint(forLevel: 1), .touching)
+        XCTAssertEqual(PipWindow.tint(forLevel: 2), .touching)
+        // Three seconds in — this is the level that also buzzes.
+        XCTAssertEqual(PipWindow.tint(forLevel: 3), .sustained)
+    }
+
+    func testAlertColoursAreRedAndEscalate() {
+        var idle = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+        var touching = idle
+        var sustained = idle
+        PipWindow.colour(for: .idle).getRed(&idle.0, green: &idle.1, blue: &idle.2, alpha: &idle.3)
+        PipWindow.colour(for: .touching).getRed(&touching.0, green: &touching.1, blue: &touching.2,
+                                                alpha: &touching.3)
+        PipWindow.colour(for: .sustained).getRed(&sustained.0, green: &sustained.1, blue: &sustained.2,
+                                                 alpha: &sustained.3)
+        XCTAssertGreaterThan(touching.0, idle.0)
+        XCTAssertGreaterThan(sustained.0, touching.0, "the three-second mark has to look worse")
+        XCTAssertGreaterThan(touching.0, touching.1, "and both have to read as red")
     }
 }

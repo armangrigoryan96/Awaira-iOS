@@ -1,15 +1,14 @@
 import AVKit
-import OSLog
 import UIKit
 
-/// The floating window: a sliver of nothing, as small as iOS will allow.
+/// The floating window: a bar of colour, as small as iOS will allow.
 ///
 /// It isn't there to be watched — it's there because iOS only permits the camera while some of the
-/// app's pixels are on screen — so it shows no video, no numbers and no colour. Nothing is drawn in
-/// it at all: it is transparent in every state, and the reactions to a hand reaching your face are
-/// the ones that don't need the window (the buzz, the tone) plus the red frame and blur the app
-/// shows when it's open. A bar sitting on top of whatever you're doing, going red, was the cost of
-/// the camera staying on; it isn't any more.
+/// app's pixels are on screen — so it shows no video and no numbers. But it is the only surface the
+/// app has while you're in another app, so it carries the reaction the open app shows as a red frame:
+/// black while nothing is happening, red the moment a hand reaches your face, bright red once it has
+/// stayed for the delay set in the settings panel — three seconds unless changed, which is also
+/// when the phone starts buzzing.
 ///
 /// Why this is a view controller rather than the sample-buffer window it used to be: with a
 /// sample-buffer content source, the window's proportions do not follow the frames we enqueue —
@@ -25,8 +24,7 @@ final class PipWindowController: AVPictureInPictureVideoCallViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
-        view.isOpaque = false
+        view.backgroundColor = PipWindow.colour(for: .idle)
         preferredContentSize = PipWindow.preferredSize(thickness: PipWindow.savedThickness)
         // Nothing in the window is meant to be touched: it carries no controls, and a tap that lands
         // on it should not be the app's doing. The window's own drag and close gestures belong to
@@ -34,107 +32,12 @@ final class PipWindowController: AVPictureInPictureVideoCallViewController {
         view.isUserInteractionEnabled = false
     }
 
-    /// A view that says when it has been re-parented. Starting PiP moves our view out of the app and
-    /// into the system's window, and that is the moment the black behind it appears — so it is also
-    /// the moment worth reacting to. Layout alone was not enough: it runs while the view still sits
-    /// in the app, and need not run again once it lands in the window.
-    private final class ReparentingView: UIView {
-        var onMoveToWindow: (() -> Void)?
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            onMoveToWindow?()
-        }
-    }
-
-    override func loadView() {
-        let hosted = ReparentingView()
-        hosted.onMoveToWindow = { [weak self] in self?.clearBackdrop() }
-        view = hosted
-    }
-
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        clearBackdrop()
         let size = view.bounds.size
         guard size != reportedSize else { return }
         reportedSize = size
         onSizeChange?(size)
-    }
-
-    /// Take the black out of whatever AVKit wraps our view in.
-    ///
-    /// A clear `view` is only clear down to the next opaque thing behind it, and PiP is built for
-    /// video, so the containers it hosts us in default to black. This clears every one of them we
-    /// can reach — the ancestors, the window, and any sibling sitting behind our view, which is
-    /// where a backdrop would live. Anything the system paints in its *own* process is out of reach;
-    /// `describeHierarchy()` is what says which of the two we are looking at.
-    ///
-    /// Called on every layout pass, whenever the view changes window, and again on a few beats after
-    /// PiP starts, because the containers are not all in place at the same moment.
-    func clearBackdrop() {
-        view.backgroundColor = .clear
-        view.isOpaque = false
-        var child: UIView = view
-        var ancestor: UIView? = view.superview
-        while let current = ancestor {
-            current.backgroundColor = .clear
-            current.isOpaque = false
-            // A backdrop is a sibling *behind* us, not an ancestor: clearing the container leaves it
-            // untouched. Only the ones below our own branch are hidden, so nothing that might be
-            // drawing our view is ever removed.
-            if let index = current.subviews.firstIndex(of: child) {
-                for sibling in current.subviews.prefix(index) {
-                    sibling.isHidden = true
-                }
-            }
-            child = current
-            ancestor = current.superview
-        }
-        view.window?.backgroundColor = .clear
-        view.window?.isOpaque = false
-        // Views were not the whole story: `AVPictureInPicturePlayerLayerView` is a view built around
-        // a *layer*, and a layer's background is invisible to the walk above. Clearing the colour is
-        // as far as this goes — the layer that carries our pixels to the system's window is
-        // somewhere in here, so it is never hidden, never detached, and keeps its contents.
-        if let root = view.window?.layer { Self.clearLayerBackgrounds(root) }
-    }
-
-    private static func clearLayerBackgrounds(_ layer: CALayer) {
-        layer.backgroundColor = nil
-        layer.isOpaque = false
-        for sublayer in layer.sublayers ?? [] { clearLayerBackgrounds(sublayer) }
-    }
-
-    private static func describeLayer(_ layer: CALayer, depth: Int, into lines: inout [String]) {
-        let pad = String(repeating: "  ", count: depth)
-        let bg = layer.backgroundColor.map { "\($0)" } ?? "nil"
-        lines.append("\(pad)\(type(of: layer)) frame=\(layer.frame) opaque=\(layer.isOpaque) hidden=\(layer.isHidden) opacity=\(layer.opacity) contents=\(layer.contents == nil ? "nil" : "set") bg=\(bg)")
-        for sublayer in layer.sublayers ?? [] { describeLayer(sublayer, depth: depth + 1, into: &lines) }
-    }
-
-    /// One line per view from ours up to the window: who it is, how big, and what it is painting.
-    /// The black bar is either something in this list or something in another process, and the two
-    /// need completely different answers — so this is the first thing to look at, not a guess.
-    func describeHierarchy() -> String {
-        var lines: [String] = []
-        var node: UIView? = view
-        while let current = node {
-            let colour = current.backgroundColor.map { "\($0)" } ?? "nil"
-            lines.append("""
-            \(type(of: current)) frame=\(current.frame) opaque=\(current.isOpaque) \
-            alpha=\(current.alpha) bg=\(colour) layerBg=\(String(describing: current.layer.backgroundColor)) \
-            subviews=\(current.subviews.map { "\(type(of: $0))" })
-            """)
-            node = current.superview
-        }
-        if let window = view.window {
-            lines.append("window \(type(of: window)) opaque=\(window.isOpaque) bg=\(window.backgroundColor.map { "\($0)" } ?? "nil") level=\(window.windowLevel.rawValue)")
-            lines.append("layers:")
-            Self.describeLayer(window.layer, depth: 1, into: &lines)
-        } else {
-            lines.append("window: none")
-        }
-        return lines.joined(separator: "\n  ")
     }
 }
 
@@ -148,9 +51,6 @@ enum PipWindow {
     /// panel moves. At the default 8 the ratio is 200:1 — up from an early 80:1, because the bar was
     /// still thick enough to grab with a fingertip. Whether asking this thin changed anything is only
     /// answerable on a phone: the HUD prints the size the window actually got (`pip 385×19`).
-    ///
-    /// The window is invisible now, but its size is still the size of the thing iOS lets the user
-    /// drag and tap, so thin is still worth asking for.
     static let length: CGFloat = 1600
 
     /// How thick to ask for, and the limits of the ask.
@@ -191,5 +91,26 @@ enum PipWindow {
             return clamp(thickness: CGFloat(stored))
         }
         set { UserDefaults.standard.set(Double(clamp(thickness: newValue)), forKey: thicknessKey) }
+    }
+
+    /// What the bar is saying, derived from `DetectionCore`'s levels: 0 away, 1 touching,
+    /// 2 lingering, 3 sustained.
+    enum Tint: Equatable { case idle, touching, sustained }
+
+    static func tint(forLevel level: Int) -> Tint {
+        switch level {
+        case ..<1: return .idle
+        case 3...: return .sustained
+        default:   return .touching
+        }
+    }
+
+    static func colour(for tint: Tint) -> UIColor {
+        switch tint {
+        // Black so the window disappears into a dark wallpaper when there's nothing to report.
+        case .idle:      return .black
+        case .touching:  return UIColor(red: 0.65, green: 0.05, blue: 0.05, alpha: 1)
+        case .sustained: return UIColor(red: 1.00, green: 0.15, blue: 0.15, alpha: 1)
+        }
     }
 }

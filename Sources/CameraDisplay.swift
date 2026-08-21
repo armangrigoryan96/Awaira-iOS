@@ -13,12 +13,11 @@ import UIKit
 /// background mode) the capture session is allowed to keep running. PiP can only carry an
 /// `AVSampleBufferDisplayLayer`, so frames are rendered by hand into one.
 ///
-/// The floating window itself is not this layer, though: it's a `PipWindowController` — a
-/// transparent rectangle, sized by `preferredContentSize`, which is the only lever AVKit gives us on
-/// how much of the screen the window takes. Nothing is drawn in it and no frames go to it: it shows
-/// nothing at all, in any state. The reactions that land while the app is minimized are the buzz and
-/// the tone; the red frame and the blur belong to the open app, which can't paint over the rest of
-/// the phone anyway.
+/// The floating window itself is not this layer, though: it's a `PipWindowController` — a blank
+/// rectangle, sized by `preferredContentSize`, which is the only lever AVKit gives us on how much of
+/// the screen the window takes. Nothing is drawn in it and no frames go to it. The one reaction that
+/// still lands there is the buzz at three seconds; the red frame and the blur belong to the open app,
+/// which can't paint over the rest of the phone anyway.
 @MainActor
 final class CameraDisplay: NSObject, ObservableObject {
 
@@ -44,9 +43,9 @@ final class CameraDisplay: NSObject, ObservableObject {
     /// ratio, so this is what says whether asking for thinner did anything; the HUD shows it.
     var onWindowSizeChange: ((CGSize) -> Void)?
 
-    /// How thick the window is. Nothing is drawn in it, so this is no longer about how the bar looks
-    /// — it is the size of the invisible thing iOS lets the user drag and tap, so how easy it is to
-    /// hit by accident.
+    /// How thick the thread is drawn. The one number that decides whether the bar reads as a hairline
+    /// or as something you can see across the room — and, since its touches belong to iOS, how easy
+    /// it is to hit by accident.
     var windowThickness = PipWindow.savedThickness {
         didSet {
             guard windowThickness != oldValue else { return }
@@ -56,10 +55,12 @@ final class CameraDisplay: NSObject, ObservableObject {
     }
 
     /// The same flag, readable from the capture queue — the detector checks it to decide whether
-    /// a reaction has only the cues that need no screen (buzz, tone) or the open app's blur too.
+    /// a reaction belongs to the PiP window (darken + buzz) or to the open app (blur).
     nonisolated var isInPictureInPicture: Bool { pipLock.withLock { pipActive } }
     private nonisolated let pipLock = NSLock()
     private nonisolated(unsafe) var pipActive = false
+    /// The colour the window is currently showing, so repeat frames cost nothing.
+    private nonisolated(unsafe) var shownTint: PipWindow.Tint?
 
     private var pipController: AVPictureInPictureController?
     private var pipContent: PipWindowController?
@@ -98,7 +99,7 @@ final class CameraDisplay: NSObject, ObservableObject {
 
     /// Wire up PiP once the preview is on screen. Safe to call repeatedly.
     ///
-    /// The window it opens is a `PipWindowController` — a transparent rectangle sized by
+    /// The window it opens is a `PipWindowController` — a blank rectangle sized by
     /// `preferredContentSize`, which is the only way to tell AVKit how big the window should be.
     func preparePictureInPicture(sourceView: UIView) {
         guard pipController == nil, AVPictureInPictureController.isPictureInPictureSupported() else { return }
@@ -121,8 +122,25 @@ final class CameraDisplay: NSObject, ObservableObject {
         pipContent = content
     }
 
-    /// Show one camera frame. Only the in-app preview needs frames — the floating window shows
-    /// nothing, so while it's up the detector stops calling this entirely.
+    /// Colour the floating window for the current detection level — the window is the only thing the
+    /// app can show while the user is in another app, so it stands in for the red frame. Called on
+    /// every processed frame from the capture queue, and does nothing until the colour actually
+    /// changes.
+    nonisolated func showLevel(_ level: Int) {
+        let tint = PipWindow.tint(forLevel: level)
+        let changed = pipLock.withLock { () -> Bool in
+            guard shownTint != tint else { return false }
+            shownTint = tint
+            return true
+        }
+        guard changed else { return }
+        Task { @MainActor in
+            self.pipContent?.view.backgroundColor = PipWindow.colour(for: tint)
+        }
+    }
+
+    /// Show one camera frame. Only the in-app preview needs frames — the floating window draws
+    /// itself, so while it's up the detector stops calling this entirely.
     nonisolated func enqueue(_ sampleBuffer: CMSampleBuffer) {
         Task { @MainActor in
             self.prepareRenderer().enqueue(sampleBuffer)
@@ -144,31 +162,6 @@ final class CameraDisplay: NSObject, ObservableObject {
     /// `nonisolated` because the detector calls it from whichever thread told it capture is back.
     nonisolated func flushRenderer() {
         Task { @MainActor in _ = self.prepareRenderer() }
-    }
-
-    // MARK: - Keeping the window invisible
-
-    /// Clear the black behind our view, repeatedly, for the first couple of seconds of PiP.
-    ///
-    /// Once is not enough: the system assembles the window over several beats, and a container that
-    /// doesn't exist yet can't be cleared. The beats are cheap — a walk up a handful of views — and
-    /// they stop on their own. The dump on the last one is the only way to see, off the device,
-    /// whether the black we're chasing is a view we can reach or something drawn in another process.
-    private func clearWindowBackdrop() {
-        guard let content = pipContent else { return }
-        for delay in [0, 0.05, 0.2, 0.5, 1.0, 2.0] as [Double] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak content] in
-                guard let content, self != nil else { return }
-                content.clearBackdrop()
-                if delay == 2.0 {
-                    let dump = content.describeHierarchy()
-                    self?.log.notice("pip hierarchy:\n  \(dump, privacy: .public)")
-                    // Also on stdout: `devicectl device process launch --console` shows this
-                    // without the phone having to be plugged into Console.app.
-                    print("PIP-HIERARCHY:\n  " + dump)
-                }
-            }
-        }
     }
 
     // MARK: - Window size
@@ -285,7 +278,9 @@ extension CameraDisplay: AVPictureInPictureControllerDelegate {
     func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
         isPictureInPictureActive = true
         restartingPictureInPicture = false
-        clearWindowBackdrop()
+        // Forget the colour: the next frame should paint the window for what's happening now, even if
+        // that's the same level the app was minimized on.
+        pipLock.withLock { shownTint = nil }
         startWatchingSuspension()
     }
 
