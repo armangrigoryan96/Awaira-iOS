@@ -11,6 +11,18 @@ import SwiftUI
 /// on the detail screen and the card states its finding in words instead: the colours are a ranking
 /// of one day's zones, and the two that lead it are the thing worth reading.
 struct TouchZonesCard: View {
+    /// Where the mirror preference lives, so the detail screen's switch and this card read the one
+    /// value rather than two copies of the same string.
+    static let mirroredKey = "touchZonesMirrored"
+
+    /// Presentation only: changing the map's orientation does not alter stored zone names, so the
+    /// ranking and the sentence below read the same either way.
+    ///
+    /// The switch itself is on the detail screen, not here: the eyebrow row is a link to that screen
+    /// and has a chevron in it already, and at half the page's width a control beside the title
+    /// would leave the title nothing to sit in.
+    @AppStorage(TouchZonesCard.mirroredKey) private var mirrored = true
+
     /// Per-zone totals for today, keyed the way the classifier names a zone ("cheek-right").
     var counts: [String: Int] = [:]
     let onOpenDetail: () -> Void
@@ -19,8 +31,9 @@ struct TouchZonesCard: View {
     /// Measured off the artwork against a 5% grid, not estimated; re-measure if it is ever
     /// re-cropped, because the crop follows the silhouette.
     ///
-    /// "left"/"right" name the side the *person* touched, so the artwork reads like a mirror: your
-    /// right cheek lights up the right of the picture.
+    /// "left"/"right" name the side the *person* touched, and these anchors place them as a mirror
+    /// would: your right cheek lights up the right of the picture. `mirrored` is what flips that for
+    /// anyone who reads the head as a portrait facing them instead.
     ///
     /// This is every name the classifier can produce, all sixteen. Nothing here may be left out: a
     /// zone with no anchor is silently invisible however often it is touched.
@@ -118,7 +131,7 @@ struct TouchZonesCard: View {
                     ForEach(Self.anchors, id: \.zone) { anchor in
                         if let count = counts[anchor.zone], count > 0 {
                             pill(count, max: maxCount)
-                                .position(x: geo.size.width * anchor.x,
+                                .position(x: geo.size.width * displayX(for: anchor),
                                           y: geo.size.height * anchor.y)
                         }
                     }
@@ -182,5 +195,10 @@ struct TouchZonesCard: View {
         counts.filter { $0.value > 0 }
             .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
             .map { (zone: $0.key, count: $0.value) }
+    }
+
+    /// The original map is mirrored; the alternative swaps the visual left/right positions.
+    private func displayX(for anchor: (zone: String, x: CGFloat, y: CGFloat)) -> CGFloat {
+        mirrored ? anchor.x : 1 - anchor.x
     }
 }

@@ -58,12 +58,21 @@ run: build
 	xcrun simctl launch booted $(BUNDLE_ID)
 
 device: generate
-	xcodebuild build -project $(PROJECT) -scheme $(SCHEME) \
-		-destination "$(DEVICE_DEST)" -allowProvisioningUpdates \
-		DEVELOPMENT_TEAM=$(TEAM) | tail -5
-	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
-		-destination "$(DEVICE_DEST)" -showBuildSettings 2>/dev/null \
-		| awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$$2} / FULL_PRODUCT_NAME /{n=$$2} END{print d"/"n}'); \
+	@BUILD_LOG=$$(mktemp -t awaira-ios-build); \
+	if xcodebuild build -project $(PROJECT) -scheme $(SCHEME) \
+		-destination "$(DEVICE_DEST)" -derivedDataPath build-device \
+		-allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM) >"$$BUILD_LOG" 2>&1; then \
+		tail -5 "$$BUILD_LOG"; \
+	else \
+		tail -50 "$$BUILD_LOG"; \
+		rm -f "$$BUILD_LOG"; \
+		echo "❌ Build failed — the app was not installed or launched."; \
+		echo "   Sign in to Xcode with an Apple ID that belongs to team $(TEAM), then retry: make mobile-run-app"; \
+		exit 1; \
+	fi; \
+	rm -f "$$BUILD_LOG"
+	@APP="build-device/Build/Products/Debug-iphoneos/Awaira.app"; \
+	[ -d "$$APP" ] || { echo "❌ Build succeeded but no app was produced at $$APP"; exit 1; }; \
 	xcrun devicectl device install app --device $(DEVICE) "$$APP" | grep -E 'App installed|bundleID'
 	@xcrun devicectl device process launch --device $(DEVICE) \
 		--terminate-existing $(BUNDLE_ID) | tail -1

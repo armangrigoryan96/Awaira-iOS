@@ -13,6 +13,11 @@ import SwiftUI
 struct MobilePatternsView: View {
     @ObservedObject var detector: Detector
 
+    /// Whether the head on Today places a zone as a mirror would. It is that card's preference, but
+    /// its own eyebrow row is a link to this screen, so the switch lives here with the legend — both
+    /// are things you consult once and then leave alone.
+    @AppStorage(TouchZonesCard.mirroredKey) private var mirrored = true
+
     private var patterns: [MobilePatternInsight] {
         MobilePatternInsight.make(week: detector.week,
                                   hourly: detector.hourOfWeek,
@@ -200,9 +205,37 @@ struct MobilePatternsView: View {
 
                 legend
             }
+
+            mirrorSwitch
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .awairaCard(padding: 14)
+    }
+
+    /// Presentation only, and the row says so: flipping the head does not re-file a single touch, and
+    /// the ranking above it does not move.
+    private var mirrorSwitch: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Rectangle()
+                .fill(AwairaPalette.cardBorder)
+                .frame(height: 1)
+                .padding(.vertical, 4)
+
+            Toggle(isOn: $mirrored) {
+                Text("Mirror the head")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AwairaPalette.text)
+            }
+            .tint(AwairaPalette.accent)
+            .accessibilityIdentifier("zonesMirrorToggle")
+            .accessibilityHint("Show left and right sides as they appear in a mirror.")
+
+            Text(mirrored ? "Your right cheek lights up the right of the picture."
+                          : "The head faces you, so your right cheek lights up its left.")
+                .font(.system(size: 12))
+                .foregroundStyle(AwairaPalette.soft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// The same three bands the head's pills use, so a colour means one thing across both screens.
