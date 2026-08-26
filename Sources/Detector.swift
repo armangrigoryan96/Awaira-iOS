@@ -28,14 +28,25 @@ final class Detector: NSObject, ObservableObject {
     @Published private(set) var actualPulls = 0
     @Published private(set) var activeSecondsToday = 0.0
     @Published private(set) var week: [MobileStatsStore.DayBar] = []
+    /// Today hour by hour, and the same for every day in `week` keyed by its id — what the Today
+    /// heatmap draws for whichever day the week strip has selected.
+    @Published private(set) var chartDay: [MobileStatsStore.DayBar] = []
+    @Published private(set) var hoursByDay: [String: [MobileStatsStore.DayBar]] = [:]
     @Published private(set) var hourOfWeek = Array(repeating: 0, count: 24)
     @Published private(set) var weeklyTotal = 0
     @Published private(set) var weeklyRate = 0.0
     @Published private(set) var weeklyImprovement: Double?
+    /// Today's completed touches per head zone, keyed by `ZoneHit.name` — what the Today page's
+    /// head draws a number over.
+    @Published private(set) var zoneCounts: [String: Int] = [:]
     @Published private(set) var lastDetection: Date?
     @Published var fps = 0.0
     @Published var hasFace = false
     @Published var connected = false          // camera running and delivering frames
+    /// The same flag as `isPaused`, published for the UI: the header's camera switch reads it, and
+    /// it is the user's own intent, not the session's state — a stashed PiP window or a phone call
+    /// stops capture without ever touching this.
+    @Published private(set) var paused = false
     /// True while the PiP window sits stashed in the screen edge. iOS forbids capture when nothing
     /// of the app is on screen, so detection is paused for as long as this is true — the app tries
     /// to pull the window back out, see `CameraDisplay.evaluateSuspension()`.
@@ -127,6 +138,12 @@ final class Detector: NSObject, ObservableObject {
     private var lastStatsPublish: CFTimeInterval = 0
     /// Aggregate-only, local history backing the mobile dashboard.
     private let stats = MobileStatsStore()
+    /// Names *where* on the head each finished touch landed. Like `stats`, it lives on the capture
+    /// queue and is touched from nowhere else, so it needs no lock — unlike `core`, whose config the
+    /// UI writes.
+    private let zoneTracker = TouchZoneTracker()
+    /// The face-space frame of the last face pass, rebuilt whenever the landmark stage answers.
+    private var faceFrame: FaceFrame?
 
     /// Run the face request every Nth frame, as on the Mac.
     private let faceEvery = 3
@@ -135,6 +152,10 @@ final class Detector: NSObject, ObservableObject {
 
     // MARK: Vision requests (reused across frames)
     private let faceRequest = VNDetectFaceRectanglesRequest()
+    /// The landmark stage, chained onto the boxes above via `inputFaceObservations` rather than run
+    /// standalone — it only has to refine faces the cheap pass already found. Feeds `FaceFrame`,
+    /// which is what turns "a hand is on the head" into "on the right cheek".
+    private let landmarkRequest = VNDetectFaceLandmarksRequest()
     private let handRequest: VNDetectHumanHandPoseRequest = {
         let r = VNDetectHumanHandPoseRequest()
         r.maximumHandCount = 2
@@ -204,6 +225,9 @@ final class Detector: NSObject, ObservableObject {
         clearLiveState()
     }
 
+    /// Stop and restart detection without tearing the capture session down — the session's inputs
+    /// are wired once, in `configureAndRun`, so this is the only way to switch the camera off and
+    /// back on. `stop()` is final by comparison: nothing rebuilds the session afterwards.
     func togglePause() {
         let nowPaused = lock.withLock { pausedFlag.toggle(); return pausedFlag }
         captureQueue.async { [weak self] in
@@ -211,9 +235,11 @@ final class Detector: NSObject, ObservableObject {
             if nowPaused { self.session.stopRunning(); self.core.reset() }
             else if !self.lock.withLock({ self.backgrounded }) { self.session.startRunning() }
         }
+        onMain { self.paused = nowPaused }
         if nowPaused { clearLiveState() }
     }
 
+    /// Read from the capture queue, where the frame loop gates on it.
     var isPaused: Bool { lock.withLock { pausedFlag } }
 
     private func fail(_ message: String) {
@@ -433,10 +459,13 @@ final class Detector: NSObject, ObservableObject {
         actualPulls = snapshot.today.pulls
         activeSecondsToday = snapshot.today.activeSeconds
         week = snapshot.week
+        chartDay = snapshot.todayHours
+        hoursByDay = snapshot.hoursByDay
         hourOfWeek = snapshot.hourOfWeek
         weeklyTotal = snapshot.weeklyTotal
         weeklyRate = snapshot.weeklyRate
         weeklyImprovement = snapshot.weeklyImprovement
+        zoneCounts = snapshot.todayZones
         lastDetection = snapshot.lastDetection
     }
 }
@@ -491,19 +520,60 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         if runHands { requests.append(handRequest) }
         if !requests.isEmpty { try? handler.perform(requests) }
 
-        let faces: [CGRect] = runFace
-            ? (faceRequest.results ?? [])
-                .sorted { $0.confidence > $1.confidence }
-                .map(\.boundingBox)
+        // The observations themselves, not just their boxes: the landmark stage runs on them, and
+        // the core reports back which one it picked so the same face can be looked up here.
+        let observations: [VNFaceObservation] = runFace
+            ? (faceRequest.results ?? []).sorted { $0.confidence > $1.confidence }
             : []
+
+        // Second pass, only when there is a face to work with: the landmark stage runs on the boxes
+        // the request above just produced. A failure here costs nothing — the zone label goes
+        // missing for that touch, and everything the app counts carries on from the box alone. The
+        // results are read only when the pass actually succeeded, because `landmarkRequest` keeps
+        // the previous pass's answers and a face from 0.6 s ago would be classified as if it were
+        // this one's.
+        var landmarked: [VNFaceObservation] = []
+        if runFace, !observations.isEmpty {
+            landmarkRequest.inputFaceObservations = observations
+            do {
+                try handler.perform([landmarkRequest])
+                landmarked = landmarkRequest.results ?? []
+            } catch {
+                log.debug("face landmarks failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
         let handsNorm = runHands ? handPoints() : []
 
         let input = DetectionCore.FrameInput(time: now, ranFaceRequest: runFace,
-                                             faces: faces, hands: handsNorm)
+                                             faces: observations.map(\.boundingBox), hands: handsNorm)
         let out = lock.withLock { core.process(input) }
+
+        // The landmark pass answers in the order it was asked, so the core's index names the same
+        // face here. If it came back short, or without landmarks for this one, the zone label is
+        // simply skipped — the head zone does not depend on it. On the frames between face passes
+        // there is nothing to rebuild from, and the tracker holds the last frame itself.
+        let frameSize = CGSize(width: width, height: height)
+        if let index = out.faceIndex, index < landmarked.count {
+            faceFrame = buildFaceFrame(landmarked[index], frameSize: frameSize)
+        } else {
+            faceFrame = nil
+        }
         let wallClockNow = Date()
         if out.didStartTouch { stats.recordDetection(at: wallClockNow) }
         if out.didEndTouch { stats.recordOutcome(sustained: out.touchWasPull, at: wallClockNow) }
+
+        // Zone labelling. Runs *after* the core has spoken and only reads its result — a touch is
+        // counted, extended and ended exactly as it was before this existed. A touch the classifier
+        // never named (hand in the head box but off the head, or the face lost for its whole
+        // duration) records nothing, so the zone totals are legitimately smaller than the day's
+        // interruption count. Before the snapshot below, so the frame that ends a touch already
+        // publishes its zone.
+        if let finished = zoneTracker.update(faceFrame: faceFrame, faceChecked: runFace,
+                                             hands: handsNorm, zone: out.zone,
+                                             touching: out.touching, frameSize: frameSize) {
+            stats.recordZone(finished.name, at: wallClockNow)
+        }
         lastLevel = out.level
         // Minimized, the floating window is the only thing the app can show — so it carries the red
         // frame's job: red on a touch, bright red once the hand has been there for the set delay.
@@ -534,6 +604,62 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
             self.bufferAspect = aspect
             if !self.connected { self.connected = true; self.errorText = nil }
         }
+    }
+
+    // MARK: Face landmarks → the classifier's coordinate system
+
+    /// Face-space coordinate system for the touch-zone classifier, in the same mirrored display
+    /// pixels the hand landmarks arrive in.
+    ///
+    /// Ported from the Mac's `Detector.buildFaceFrame`. Vision hands back outlines, not the five
+    /// points YuNet gives the Windows app, so the mouth corners have to be picked out of the lip
+    /// outline: they are its two extremes along the eye line. That axis is known before `FaceFrame`
+    /// exists, so it is computed here first.
+    ///
+    /// Which eye Vision calls left and which right does not matter — swapping them only flips the
+    /// sign of `u`, and the classifier uses `|u|` for the zone and the display x for the side.
+    private func buildFaceFrame(_ observation: VNFaceObservation, frameSize size: CGSize) -> FaceFrame? {
+        guard let landmarks = observation.landmarks,
+              let leftEyeRegion = landmarks.leftEye,
+              let rightEyeRegion = landmarks.rightEye,
+              let lipsRegion = landmarks.outerLips else { return nil }
+
+        // `pointsInImage` is in image pixels with a bottom-left origin; the rest of the detector
+        // works in mirrored, top-left display pixels.
+        func toDisplay(_ region: VNFaceLandmarkRegion2D) -> [CGPoint] {
+            region.pointsInImage(imageSize: size).map {
+                CGPoint(x: size.width - $0.x, y: size.height - $0.y)
+            }
+        }
+        func centroid(_ points: [CGPoint]) -> CGPoint? {
+            guard !points.isEmpty else { return nil }
+            let sum = points.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+            return CGPoint(x: sum.x / CGFloat(points.count), y: sum.y / CGFloat(points.count))
+        }
+
+        guard let leftEye = centroid(toDisplay(leftEyeRegion)),
+              let rightEye = centroid(toDisplay(rightEyeRegion)) else { return nil }
+
+        // The nose only decides which way +v points, so the middle of whichever nose outline Vision
+        // returned is precise enough.
+        let noseRegion = landmarks.nose ?? landmarks.noseCrest
+        guard let noseTip = noseRegion.flatMap({ centroid(toDisplay($0)) }) else { return nil }
+
+        let lips = toDisplay(lipsRegion)
+        guard lips.count >= 2 else { return nil }
+        let origin = CGPoint(x: (leftEye.x + rightEye.x) / 2, y: (leftEye.y + rightEye.y) / 2)
+        let dx = leftEye.x - rightEye.x, dy = leftEye.y - rightEye.y
+        let ipd = (dx * dx + dy * dy).squareRoot()
+        guard ipd >= 4 else { return nil }
+        let ex = CGVector(dx: dx / ipd, dy: dy / ipd)
+        func alongEyeLine(_ p: CGPoint) -> CGFloat {
+            (p.x - origin.x) * ex.dx + (p.y - origin.y) * ex.dy
+        }
+        guard let cornerA = lips.min(by: { alongEyeLine($0) < alongEyeLine($1) }),
+              let cornerB = lips.max(by: { alongEyeLine($0) < alongEyeLine($1) }) else { return nil }
+
+        return FaceFrame(leftEye: leftEye, rightEye: rightEye, noseTip: noseTip,
+                         mouthLeft: cornerA, mouthRight: cornerB)
     }
 
     // MARK: Hands (Vision joints → MediaPipe 0..20 ordering, mirrored display coords)

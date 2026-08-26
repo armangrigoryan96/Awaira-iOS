@@ -35,6 +35,9 @@ struct IPhoneOnboardingView: View {
             }
         }
         .accessibilityIdentifier("iphoneOnboarding")
+        // Replaying onboarding shows the answers already given, as the Mac's does — every question
+        // opens on its stored choice, so a second run is an edit rather than a blank form.
+        .onAppear(perform: restoreSavedAnswers)
     }
 
     private var header: some View {
@@ -270,15 +273,50 @@ struct IPhoneOnboardingView: View {
         else { withAnimation(.easeInOut(duration: 0.22)) { index += 1 } }
     }
 
-    private func finish() {
-        let sourceIDs = ["YouTube": "youtube", "TikTok": "tiktok", "Instagram": "instagram",
-                         "Google Search": "google_search", "Facebook": "facebook", "Reddit": "reddit",
-                         "Other": "other"]
+    /// The wire ids the backend stores, keyed by the label shown on screen.
+    private static let sourceIDs = ["YouTube": "youtube", "TikTok": "tiktok", "Instagram": "instagram",
+                                    "Google Search": "google_search", "Facebook": "facebook",
+                                    "Reddit": "reddit", "Other": "other"]
+
+    /// Puts the stored answers back on screen. Anything not recognised (an option that has since
+    /// been renamed) is dropped rather than shown as a selection the list cannot display.
+    private func restoreSavedAnswers() {
         let defaults = UserDefaults.standard
-        defaults.set(sourceIDs[source] ?? "other", forKey: "acquisitionSource")
-        defaults.set(source == "Other" ? otherSource : "", forKey: "acquisitionOther")
-        defaults.set(false, forKey: "acquisitionSubmitted")
+        let labels = Dictionary(uniqueKeysWithValues: Self.sourceIDs.map { ($0.value, $0.key) })
+        if source.isEmpty,
+           let storedID = defaults.string(forKey: MobileAcquisitionReporter.sourceKey),
+           let label = labels[storedID] {
+            source = label
+            otherSource = defaults.string(forKey: MobileAcquisitionReporter.otherKey) ?? ""
+        }
+        for step in onboardingSteps {
+            guard case .question(let question) = step.kind, answers[question.key] == nil else { continue }
+            let stored = (defaults.string(forKey: question.key) ?? "")
+                .split(separator: ",")
+                .map(String.init)
+                .filter(question.options.contains)
+            if !stored.isEmpty { answers[question.key] = Set(stored) }
+        }
+    }
+
+    private func finish() {
+        let defaults = UserDefaults.standard
+        let newSource = Self.sourceIDs[source] ?? "other"
+        let newOther = (source == "Other" ? otherSource : "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousSource = defaults.string(forKey: MobileAcquisitionReporter.sourceKey) ?? ""
+        let previousOther = (defaults.string(forKey: MobileAcquisitionReporter.otherKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        defaults.set(newSource, forKey: MobileAcquisitionReporter.sourceKey)
+        defaults.set(newOther, forKey: MobileAcquisitionReporter.otherKey)
+        // Only a changed answer needs sending again — and it goes out under the same response id,
+        // so the backend updates that row instead of storing a second one.
+        if newSource != previousSource || newOther != previousOther {
+            defaults.set(false, forKey: MobileAcquisitionReporter.submittedKey)
+        }
         for (key, values) in answers { defaults.set(values.sorted().joined(separator: ","), forKey: key) }
+        Task { await MobileAcquisitionReporter.submitIfNeeded() }
         onFinish()
     }
 }

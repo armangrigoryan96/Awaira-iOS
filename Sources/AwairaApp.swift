@@ -28,6 +28,9 @@ struct AwairaApp: App {
             }
                 .task {
                     if onboardingVersion >= 3 && !isUITest { await resolveAccess() }
+                    // A pending or edited acquisition answer goes out here, as on the Mac: the
+                    // phone retries on every launch until the backend has it.
+                    if !isUITest { await MobileAcquisitionReporter.submitIfNeeded() }
                 }
         }
     }
