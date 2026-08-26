@@ -9,7 +9,24 @@ final class MobileStatsStore {
         var pulls = 0
         var activeSeconds = 0.0
         var hourlyInterruptions = Array(repeating: 0, count: 24)
+        /// Sustained touches by hour — the heatmap's second row. Optional in the decoder so days
+        /// stored before this existed still read back, as an empty day rather than a failure.
+        var hourlyPulls: [Int]?
+        /// Completed touches per head zone, keyed by `ZoneHit.name` ("cheek-right", "forehead", …) —
+        /// what the Today page's head draws. Optional for the same reason as `hourlyPulls`: a
+        /// non-optional property's synthesized decoder fails on a missing key, and one failure here
+        /// throws away the whole stored history.
+        var zoneCounts: [String: Int]?
         var lastDetection: TimeInterval?
+
+        /// The stored array padded to 24, so callers can index it by hour without checking.
+        var pullsByHour: [Int] {
+            guard let hourlyPulls, hourlyPulls.count == 24 else { return Array(repeating: 0, count: 24) }
+            return hourlyPulls
+        }
+
+        /// The zone tally, empty rather than nil for a day stored before this existed.
+        var zones: [String: Int] { zoneCounts ?? [:] }
     }
 
     struct DayBar: Identifiable {
@@ -23,20 +40,33 @@ final class MobileStatsStore {
 
     struct Snapshot {
         let today: Day
+        /// Today hour by hour — one bar per hour of the day, for the heatmap.
+        let todayHours: [DayBar]
+        /// The same, for each day in `week`, keyed by `DayBar.id`: the heatmap follows whichever day
+        /// the week strip has selected. Built here, on the capture queue, because the store itself
+        /// must not be read from the main thread while detection is writing to it.
+        let hoursByDay: [String: [DayBar]]
         let week: [DayBar]
         let hourOfWeek: [Int]
         let weeklyTotal: Int
         let weeklyRate: Double
         /// Positive means the current seven-day rate is lower than the preceding seven days.
         let weeklyImprovement: Double?
+        /// Today's touches per head zone. Today only, like the Mac's `zoneBreakdown` — the head on
+        /// the Today page does not follow the week strip's selection the way the heatmap does.
+        let todayZones: [String: Int]
         let lastDetection: Date?
     }
 
     private static let storageKey = "awaira.mobile.stats.v1"
     private var days: [String: Day]
     private var lastSave = Date.distantPast
+    /// Read *and* written here: a store handed a throwaway suite (as tests do) must not write the
+    /// real dashboard's history back into `.standard`.
+    private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         guard let data = defaults.data(forKey: Self.storageKey),
               let decoded = try? JSONDecoder().decode([String: Day].self, from: data) else {
             days = [:]
@@ -64,8 +94,27 @@ final class MobileStatsStore {
 
     func recordOutcome(sustained: Bool, at date: Date) {
         mutateDay(for: date) {
-            if sustained { $0.pulls += 1 }
-            else { $0.prevented += 1 }
+            if sustained {
+                $0.pulls += 1
+                let hour = Calendar.current.component(.hour, from: date)
+                var hourly = $0.pullsByHour
+                if hourly.indices.contains(hour) { hourly[hour] += 1 }
+                $0.hourlyPulls = hourly
+            } else {
+                $0.prevented += 1
+            }
+        }
+        save(force: true)
+    }
+
+    /// One finished touch, filed under the head zone it spent the longest in. Called on the falling
+    /// edge of a touch, after `recordOutcome` — and only when the classifier actually named a zone,
+    /// so these totals are legitimately smaller than the day's interruption count.
+    func recordZone(_ name: String, at date: Date) {
+        mutateDay(for: date) {
+            var zones = $0.zones
+            zones[name, default: 0] += 1
+            $0.zoneCounts = zones
         }
         save(force: true)
     }
@@ -110,9 +159,35 @@ final class MobileStatsStore {
             }
             if let last = day.lastDetection, last > (mostRecent ?? 0) { mostRecent = last }
         }
-        return Snapshot(today: today, week: week, hourOfWeek: hourly, weeklyTotal: weeklyTotal,
+        var hoursByDay: [String: [DayBar]] = [:]
+        for bar in week {
+            hoursByDay[bar.id] = Self.hourBars(for: days[bar.id] ?? Day(),
+                                               on: calendar.startOfDay(for: bar.date))
+        }
+
+        return Snapshot(today: today,
+                        todayHours: hoursByDay[todayKey] ?? Self.hourBars(for: today, on: todayStart),
+                        hoursByDay: hoursByDay,
+                        week: week, hourOfWeek: hourly, weeklyTotal: weeklyTotal,
                         weeklyRate: weeklyRate, weeklyImprovement: improvement,
+                        todayZones: today.zones,
                         lastDetection: mostRecent.map(Date.init(timeIntervalSince1970:)))
+    }
+
+    /// One day, hour by hour — what the heatmap draws. A day with nothing stored still returns 24
+    /// empty hours, so the card keeps its shape from morning on.
+    private static func hourBars(for day: Day, on start: Date) -> [DayBar] {
+        let calendar = Calendar.current
+        let pulls = day.pullsByHour
+        return (0..<24).map { hour in
+            let date = calendar.date(byAdding: .hour, value: hour, to: start) ?? start
+            return DayBar(id: "h\(hour)", date: date,
+                          interruptions: day.hourlyInterruptions.indices.contains(hour)
+                                         ? day.hourlyInterruptions[hour] : 0,
+                          prevented: 0,
+                          pulls: pulls.indices.contains(hour) ? pulls[hour] : 0,
+                          activeSeconds: 0)
+        }
     }
 
     static func hourlyRate(interruptions: Int, activeSeconds: Double) -> Double {
@@ -142,7 +217,7 @@ final class MobileStatsStore {
         lastSave = Date()
         pruneHistory()
         guard let data = try? JSONEncoder().encode(days) else { return }
-        UserDefaults.standard.set(data, forKey: Self.storageKey)
+        defaults.set(data, forKey: Self.storageKey)
     }
 
     private func pruneHistory() {

@@ -79,6 +79,11 @@ struct DetectionCore {
         var touchWasPull = false
         /// On `didEndTouch`: how long the hand stayed in the zone.
         var touchDuration: TimeInterval = 0
+        /// Which entry of `FrameInput.faces` the zone was built from, on frames that ran the face
+        /// request and found one — nil otherwise. The core has no use for it; it is here so the
+        /// caller can pull the *same* face out of its landmark pass and name the touched zone.
+        /// Declared last so the existing memberwise calls keep working.
+        var faceIndex: Int?
     }
 
     var config: Config
@@ -120,7 +125,8 @@ struct DetectionCore {
     // MARK: - The per-frame loop
 
     mutating func process(_ input: FrameInput) -> FrameOutput {
-        if input.ranFaceRequest { updateZone(faces: input.faces, now: input.time) }
+        var pickedFace: Int?
+        if input.ranFaceRequest { pickedFace = updateZone(faces: input.faces, now: input.time) }
 
         var inZone = false
         if let z = activeZone {
@@ -131,6 +137,7 @@ struct DetectionCore {
         if inZone { inStreak += 1; outStreak = 0 } else { outStreak += 1; inStreak = 0 }
 
         var out = FrameOutput(zone: activeZone)
+        out.faceIndex = pickedFace
 
         if !stateTouching, inStreak >= config.minFrames {
             stateTouching = true
@@ -155,7 +162,9 @@ struct DetectionCore {
 
     // MARK: - Zone (face → head zone, stabilized)
 
-    private mutating func updateZone(faces: [CGRect], now: CFTimeInterval) {
+    /// - Returns: the index of the face the zone was built from, or nil when there was none.
+    @discardableResult
+    private mutating func updateZone(faces: [CGRect], now: CFTimeInterval) -> Int? {
         guard !faces.isEmpty else {
             // Face truly gone (turned away / left frame) past the coast window → drop the zone.
             if stableZone == nil || now - lastFaceTime > config.zoneCoastSecs {
@@ -163,32 +172,36 @@ struct DetectionCore {
             } else {
                 activeZone = coastZone   // coast on the last zone through a brief miss
             }
-            return
+            return nil
         }
-        let face = pickDetection(faces)
-        let raw = buildZone(faceRect: Self.displayRect(face))
+        let index = pickDetection(faces)
+        let raw = buildZone(faceRect: Self.displayRect(faces[index]))
         let (newStable, newReject, _) = stabilize(raw: raw, stable: stableZone, reject: zoneReject)
         stableZone = newStable
         zoneReject = newReject
         coastZone = newStable
         activeZone = newStable
         lastFaceTime = now
+        return index
     }
 
     /// With a known previous zone, prefer the face nearest its center (tracking continuity);
     /// otherwise the most confident one — which is `faces[0]`, since the caller pre-sorts.
-    private func pickDetection(_ faces: [CGRect]) -> CGRect {
-        if faces.count == 1 { return faces[0] }
+    ///
+    /// Returns an index rather than the rect itself so the caller can pull the matching entry out
+    /// of its landmark pass, which answers in the order it was asked.
+    private func pickDetection(_ faces: [CGRect]) -> Int {
+        if faces.count == 1 { return 0 }
         if let s = stableZone {
             let scx = (s[0] + s[2]) / 2, scy = (s[1] + s[3]) / 2
-            return faces.min { a, b in
-                let ra = Self.displayRect(a), rb = Self.displayRect(b)
+            return faces.indices.min { a, b in
+                let ra = Self.displayRect(faces[a]), rb = Self.displayRect(faces[b])
                 let da = pow(ra.midX - scx, 2) + pow(ra.midY - scy, 2)
                 let db = pow(rb.midX - scx, 2) + pow(rb.midY - scy, 2)
                 return da < db
-            } ?? faces[0]
+            } ?? 0
         }
-        return faces[0]
+        return 0
     }
 
     /// Vision bbox (normalized, bottom-left origin) → display rect (top-left origin, mirrored).

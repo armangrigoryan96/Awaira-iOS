@@ -328,6 +328,43 @@ final class DetectionCoreTests: XCTestCase {
         XCTAssertTrue(out.touchWasPull, "the effect had already fired before the hand moved")
     }
 
+    // MARK: Which face the zone came from
+
+    /// The caller runs its landmark pass over the same faces it handed in, so the core has to say
+    /// which one it used — otherwise a second person in the frame could name the zone.
+    func testFaceIndexNamesTheFaceTheZoneWasBuiltFrom() {
+        var core = DetectionCore()
+        let out = core.process(.init(time: 100, ranFaceRequest: true, faces: [face()], hands: []))
+        XCTAssertEqual(out.faceIndex, 0)
+    }
+
+    func testFaceIndexIsNilWithoutAFacePass() {
+        var core = DetectionCore()
+        run(&core, frames: 3, faces: [face()], hands: [])
+        let out = core.process(.init(time: 200, ranFaceRequest: false, faces: [], hands: []))
+        XCTAssertNil(out.faceIndex, "no face request ran, so there is nothing to look up")
+        XCTAssertNil(core.process(.init(time: 201, ranFaceRequest: true, faces: [],
+                                        hands: [])).faceIndex)
+    }
+
+    /// With no zone yet the most confident face wins — which is `faces[0]`, since the caller sorts.
+    func testFaceIndexPrefersTheMostConfidentFaceFirst() {
+        var core = DetectionCore()
+        let out = core.process(.init(time: 100, ranFaceRequest: true,
+                                     faces: [face(cx: 0.3), face(cx: 0.7)], hands: []))
+        XCTAssertEqual(out.faceIndex, 0)
+    }
+
+    /// Once a zone exists, tracking continuity wins instead: the face nearest the last zone is the
+    /// one being followed, whatever order the boxes arrived in.
+    func testFaceIndexFollowsTheTrackedFace() {
+        var core = DetectionCore()
+        run(&core, frames: 3, faces: [face(cx: 0.3)], hands: [])
+        let out = core.process(.init(time: 101, ranFaceRequest: true,
+                                     faces: [face(cx: 0.9), face(cx: 0.3)], hands: []))
+        XCTAssertEqual(out.faceIndex, 1, "the second box is the face we were already tracking")
+    }
+
     func testResetClearsEverything() {
         var core = DetectionCore()
         let f = face()
