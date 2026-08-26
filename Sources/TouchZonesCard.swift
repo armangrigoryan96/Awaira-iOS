@@ -7,6 +7,9 @@ import SwiftUI
 /// `zoneBreakdown`, so the head does not follow the week strip the way the heatmap does. Until the
 /// first classified touch of the day it is empty and the card shows its empty line.
 struct TouchZonesCard: View {
+    /// Presentation only: changing the map's orientation does not alter stored zone names.
+    @AppStorage("touchZonesMirrored") private var mirrored = true
+
     /// Per-zone totals for today, keyed the way the classifier names a zone ("cheek-right").
     var counts: [String: Int] = [:]
 
@@ -45,9 +48,17 @@ struct TouchZonesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Touch locations")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(AwairaPalette.text)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Touch locations")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AwairaPalette.text)
+
+                Spacer(minLength: 0)
+
+                Toggle("Mirror", isOn: $mirrored)
+                    .font(.system(size: 12, weight: .medium))
+                    .accessibilityHint("Show left and right sides as they appear in a mirror.")
+            }
 
             HStack(alignment: .center, spacing: 16) {
                 head
@@ -84,7 +95,7 @@ struct TouchZonesCard: View {
                     ForEach(Self.anchors, id: \.zone) { anchor in
                         if let count = counts[anchor.zone], count > 0 {
                             pill(count, max: maxCount)
-                                .position(x: geo.size.width * anchor.x,
+                                .position(x: geo.size.width * displayX(for: anchor),
                                           y: geo.size.height * anchor.y)
                         }
                     }
@@ -118,5 +129,10 @@ struct TouchZonesCard: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AwairaPalette.ink.opacity(0.75))
         }
+    }
+
+    /// The original map is mirrored; the alternative swaps the visual left/right positions.
+    private func displayX(for anchor: (zone: String, x: CGFloat, y: CGFloat)) -> CGFloat {
+        mirrored ? anchor.x : 1 - anchor.x
     }
 }
