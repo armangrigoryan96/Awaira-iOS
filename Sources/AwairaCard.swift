@@ -6,8 +6,8 @@ import UIKit
 // Kept together so a card can never drift into having its own radius or border opacity.
 
 extension View {
-    /// The design's card: a hairline outline over the page's own fill. In dark the fill *is* the
-    /// page colour, so this reads as a drawn region rather than a raised panel.
+    /// The design's card: a graphite fill inside a hairline outline. In dark it sits one step off
+    /// the near-black page, the way the Mac's cards do; in light the hairline does most of the work.
     func awairaCard(padding: CGFloat = 16) -> some View {
         self
             .padding(padding)

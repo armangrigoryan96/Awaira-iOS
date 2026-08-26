@@ -274,7 +274,12 @@ final class CameraDisplay: NSObject, ObservableObject {
 
 // MARK: - PiP plumbing
 
-extension CameraDisplay: AVPictureInPictureControllerDelegate {
+/// `@preconcurrency` on the conformance, not on each method: `CameraDisplay` is `@MainActor`, while
+/// AVKit still declares these delegate methods without isolation, so every one of them reads as
+/// crossing into the main actor. AVKit does call them on the main thread — the attribute states that
+/// assumption once and has the compiler insert the runtime check for it, instead of scattering
+/// `MainActor.assumeIsolated` through five callbacks.
+extension CameraDisplay: @preconcurrency AVPictureInPictureControllerDelegate {
     func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
         isPictureInPictureActive = true
         restartingPictureInPicture = false
