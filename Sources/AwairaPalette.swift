@@ -30,12 +30,10 @@ enum AwairaPalette {
     static let alert = dynamic(dark: rgb(255, 140, 114), light: rgb(190, 72, 60))
     static let live = accent
 
-    // Surfaces. Dark is navy, not near-black: #00223C for the page and every card, as in the
-    // 2026-08 mockups. Light stays the soft near-white system.
-    static let window = dynamic(dark: rgb(0, 34, 60), light: rgb(244, 246, 250))
-    /// Card fill — deliberately the page's own colour in dark, where a card is its hairline and
-    /// nothing else.
-    static let statsSurface = dynamic(dark: rgb(0, 34, 60), light: rgb(250, 251, 253))
+    // The mobile dashboard follows the current desktop treatment: a near-black page with graphite
+    // cards, rather than the older navy shell.
+    static let window = dynamic(dark: rgb(14, 15, 17), light: rgb(244, 246, 250))
+    static let statsSurface = dynamic(dark: rgb(29, 30, 34), light: rgb(250, 251, 253))
 
     /// The hairline that *is* a card, and the same line that outlines the header pills.
     static let cardBorder = dynamic(dark: UIColor(white: 1, alpha: 0.12),
@@ -44,7 +42,7 @@ enum AwairaPalette {
 
     /// The tab bar: in dark the one surface deeper than the page; in light the same colour as the
     /// page, separated by nothing but the hairline.
-    static let sidebar = dynamic(dark: rgb(0, 23, 42), light: rgb(243, 246, 251))
+    static let sidebar = dynamic(dark: rgb(20, 21, 24), light: rgb(243, 246, 251))
 
     /// A selected navigation item is a solid blue plate with white text, not an accent tint.
     static let navSelected = dynamic(dark: rgb(27, 87, 201), light: rgb(47, 123, 238))
