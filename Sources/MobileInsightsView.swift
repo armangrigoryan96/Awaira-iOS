@@ -46,28 +46,28 @@ struct MobileInsightsView: View {
     private var weeklyRhythmCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             MobileEyebrow(text: range == .seven ? "WEEKLY RHYTHM" : "YOUR RHYTHM")
-            HStack(alignment: .bottom, spacing: 14) {
+            VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(rangeTotal)")
-                        .scaledFont(66, weight: .bold)
-                        .monospacedDigit()
+                        .awairaFigure(58)
                         .foregroundStyle(AwairaPalette.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                     Text("approaches")
-                        .scaledFont(25, weight: .medium)
+                        .scaledFont(17, weight: .medium)
                         .foregroundStyle(AwairaPalette.text)
                     HStack(spacing: 7) {
                         Circle().fill(AwairaPalette.rate).frame(width: 10, height: 10)
-                        Text("\(rateText(rangeRate) ?? "—")/hr average")
-                            .scaledFont(15, weight: .medium)
+                        Text("\(rateText(rangeRate) ?? "—")/hr avg")
+                            .scaledFont(13, weight: .medium)
+                            .fixedSize()
                             .foregroundStyle(AwairaPalette.rate)
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
                     .background(AwairaPalette.rate.opacity(0.10), in: Capsule())
                     .overlay(Capsule().strokeBorder(AwairaPalette.rate.opacity(0.34), lineWidth: 1))
-                    Text(rangePrevented > 0 ? "\(rangePrevented) ended early\nthis \(range == .seven ? "week" : "period")" : "Your history will\nappear here")
+                    Text(rangePrevented > 0 ? "\(rangePrevented) ended early this \(range == .seven ? "week" : "period")" : "Your history will appear here")
                         .awairaSubtitle(15)
                         .foregroundStyle(AwairaPalette.ink.opacity(0.70))
                         .fixedSize(horizontal: false, vertical: true)
@@ -76,7 +76,7 @@ struct MobileInsightsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 PatternTrend(values: rhythmValues, labels: rhythmLabels)
-                    .frame(width: 210, height: 226)
+                    .frame(height: 150)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,32 +88,35 @@ struct MobileInsightsView: View {
     private var strongestPatternCard: some View {
         HStack(spacing: 13) {
             Image(systemName: "chart.line.uptrend.xyaxis")
-                .scaledFont(25, weight: .medium)
+                .scaledFont(17)
                 .foregroundStyle(AwairaPalette.accent)
-                .frame(width: 62, height: 62)
+                .frame(width: 40, height: 40)
                 .background(AwairaPalette.accent.opacity(0.12), in: Circle())
                 .overlay(Circle().strokeBorder(AwairaPalette.accent.opacity(0.28), lineWidth: 1))
             VStack(alignment: .leading, spacing: 4) {
                 Text("Your strongest pattern")
                     .awairaCaption(14)
                     .foregroundStyle(AwairaPalette.ink.opacity(0.64))
-                HStack(spacing: 6) {
-                    Text(patternTitle)
-                        .scaledFont(19, weight: .semibold)
-                        .foregroundStyle(AwairaPalette.text)
-                    Text("•")
-                        .foregroundStyle(AwairaPalette.ink.opacity(0.48))
-                    Text(patternWindow)
-                        .scaledFont(19, weight: .semibold)
-                        .foregroundStyle(AwairaPalette.accent)
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.74)
+                Text(patternTitle)
+                    .scaledFont(17, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(patternWindow)
+                    .awairaStat(14)
+                    .foregroundStyle(AwairaPalette.accent)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            Button("Explore") { showingPatternHelp = true }
-                .buttonStyle(AwairaPrimaryButton())
-                .frame(width: 102)
+            Spacer(minLength: 8)
+            Button {
+                showingPatternHelp = true
+            } label: {
+                Text("Explore")
+                    .scaledFont(13, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.accent)
+                    .awairaPill(horizontal: 14, vertical: 8)
+            }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity)
         .awairaCard(padding: 14)
@@ -124,7 +127,7 @@ struct MobileInsightsView: View {
     private var rhythmCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Your rhythm")
-                .awairaCardTitle(24)
+                .awairaCardTitle()
                 .foregroundStyle(AwairaPalette.text)
             DailyRhythm(values: hourlyValues)
                 .frame(height: 142)
@@ -262,8 +265,11 @@ struct MobileInsightsView: View {
         }.prefix(4).map { $0 }
     }
 
+    /// Categorical colour drawn from the palette rather than from a fresh set of hues. Purple and
+    /// coral belong to no other surface in either app, so a reflection topic wearing them could not
+    /// be related back to anything the rest of the product draws.
     private func contextColor(index: Int) -> Color {
-        [Color(hex: 0xAF64E6), Color(hex: 0xFF726A), AwairaPalette.live, Color(hex: 0xFEAF01)][min(index, 3)]
+        [AwairaPalette.accent, AwairaPalette.rate, AwairaPalette.live, AwairaPalette.streak][min(index, 3)]
     }
 
     private func rateText(_ value: Double) -> String? {
@@ -323,14 +329,13 @@ private struct PatternTrend: View {
                     }
                     .stroke(AwairaPalette.ink.opacity(0.22), lineWidth: 1)
                     PatternLine(points: points)
-                        .stroke(LinearGradient(colors: [Color(hex: 0x006DF1), AwairaPalette.accent, AwairaPalette.rate], startPoint: .leading, endPoint: .trailing),
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                        .stroke(AwairaPalette.accent,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     ForEach(points.indices, id: \.self) { index in
                         Circle()
                             .fill(index == points.count - 1 ? AwairaPalette.rate : AwairaPalette.accent)
                             .frame(width: index == points.count - 1 ? 14 : 9, height: index == points.count - 1 ? 14 : 9)
-                            .overlay(Circle().strokeBorder(AwairaPalette.text.opacity(0.86), lineWidth: 2))
-                            .shadow(color: index == points.count - 1 ? AwairaPalette.rate.opacity(0.55) : .clear, radius: 8)
+                            .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 1.5))
                             .position(points[index])
                     }
                 }
@@ -338,8 +343,10 @@ private struct PatternTrend: View {
             HStack {
                 ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
                     Text(label)
-                        .scaledFont(11)
+                        .scaledFont(10)
                         .foregroundStyle(AwairaPalette.ink.opacity(0.72))
+                        .lineLimit(1)
+                        .fixedSize()
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -366,14 +373,14 @@ private struct DailyRhythm: View {
                 let points = points(in: geo.size)
                 ZStack(alignment: .bottomLeading) {
                     PatternLine(points: points)
-                        .stroke(LinearGradient(colors: [Color(hex: 0x006DF1), AwairaPalette.accent], startPoint: .leading, endPoint: .trailing),
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                        .stroke(AwairaPalette.accent,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     ForEach(points.indices, id: \.self) { index in
                         if index == peakIndex || index == 0 || index == 12 {
                             Circle()
                                 .fill(index == peakIndex ? AwairaPalette.rate : AwairaPalette.live)
                                 .frame(width: 12, height: 12)
-                                .overlay(Circle().strokeBorder(AwairaPalette.text.opacity(0.86), lineWidth: 2))
+                                .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 1.5))
                                 .position(points[index])
                         }
                     }

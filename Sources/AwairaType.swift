@@ -55,11 +55,14 @@ extension View {
 // MARK: - Roles
 
 extension View {
-    /// Page titles use the reference's bold, close-set sans treatment. The date remains readable
-    /// at a glance, while the serif figures below retain the quieter data voice.
-    func awairaDisplay(_ size: CGFloat = 30) -> some View {
-        scaledFont(size, weight: .bold)
-            .tracking(-0.45)
+    /// Page titles: the date on Today, and the heading of every tab. Serif at a regular weight is
+    /// the app's voice, and it is copied verbatim from the Mac's `AwairaType.swift` — "a bold sans
+    /// heading over the same content reads like a dashboard, and the point of the redesign is that
+    /// it doesn't". Changing this one function is enough to make every page in the app stop looking
+    /// like Awaira, because every page title goes through it.
+    func awairaDisplay(_ size: CGFloat = 28) -> some View {
+        scaledFont(size, weight: .regular, design: .serif)
+            .tracking(-0.2)
     }
 
     /// The line under a page title.

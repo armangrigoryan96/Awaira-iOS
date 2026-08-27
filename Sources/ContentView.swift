@@ -13,7 +13,9 @@ struct ContentView: View {
     /// Detection is the app's primary job, so a completed onboarding starts it immediately.
     /// The header control remains a pause/resume switch for the rare times someone wants it off.
     @State private var cameraRequested = !ProcessInfo.processInfo.arguments.contains("-UITest")
-    @State private var selectedTab: MobileAppTab = .today
+    // Screenshot automation can open any product surface directly without changing normal app
+    // launch behavior. This keeps the public-site exports tied to the native SwiftUI screens.
+    @State private var selectedTab: MobileAppTab = Self.launchTab
     @State private var showingSettings = false
     @State private var showingContext = false
     @State private var selectedContext: String?
@@ -100,6 +102,13 @@ struct ContentView: View {
     }
 
     private var isUITest: Bool { ProcessInfo.processInfo.arguments.contains("-UITest") }
+
+    private static var launchTab: MobileAppTab {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-ScreenshotPatterns") { return .patterns }
+        if arguments.contains("-ScreenshotJournal") { return .journal }
+        return .today
+    }
 
     /// The header pill is the app's only camera switch, so it has to work both ways: the first tap
     /// asks for the camera, every one after that pauses or resumes it.

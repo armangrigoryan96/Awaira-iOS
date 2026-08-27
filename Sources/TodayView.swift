@@ -78,8 +78,7 @@ struct TodayView: View {
 
             HStack(alignment: .bottom, spacing: 8) {
                 Text(tracked ? String(format: "%.0f", todayRate) : "—")
-                    .scaledFont(66, weight: .bold)
-                    .monospacedDigit()
+                    .awairaFigure(58)
                     .foregroundStyle(tracked ? AwairaPalette.accent : AwairaPalette.ink.opacity(0.28))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
@@ -315,14 +314,13 @@ private struct AwarenessTrend: View {
                     }
                     .stroke(AwairaPalette.ink.opacity(0.20), lineWidth: 1)
                     TrendPath(points: points)
-                        .stroke(LinearGradient(colors: [AwairaPalette.accent, AwairaPalette.rate], startPoint: .leading, endPoint: .trailing),
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                        .stroke(AwairaPalette.accent,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     if let last = points.last {
                         Circle()
                             .fill(AwairaPalette.rate)
                             .frame(width: 13, height: 13)
-                            .overlay(Circle().strokeBorder(AwairaPalette.text, lineWidth: 3))
-                            .shadow(color: AwairaPalette.rate.opacity(0.55), radius: 10)
+                            .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 1.5))
                             .position(last)
                     }
                 }
