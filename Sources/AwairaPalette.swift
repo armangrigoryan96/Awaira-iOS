@@ -44,7 +44,7 @@ enum AwairaPalette {
     // The mobile dashboard follows the current desktop treatment: a near-black page with graphite
     // cards, rather than the older navy shell.
     static let window = dynamic(dark: rgb(14, 15, 17), light: rgb(244, 246, 250))
-    static let statsSurface = dynamic(dark: rgb(18, 22, 29), light: rgb(250, 251, 253))
+    static let statsSurface = dynamic(dark: rgb(29, 30, 34), light: rgb(250, 251, 253))
 
     /// The hairline that *is* a card, and the same line that outlines the header pills.
     static let cardBorder = dynamic(dark: rgb(48, 53, 63),
@@ -54,7 +54,7 @@ enum AwairaPalette {
     /// The tab bar. On the Mac the navigation rail is the *raised* graphite surface above the black
     /// workspace; the phone's bar now matches it, rather than being the one surface deeper than the
     /// page. That is what lets the selected tab read as an opening cut through the bar.
-    static let sidebar = dynamic(dark: rgb(18, 22, 29), light: rgb(233, 237, 245))
+    static let sidebar = dynamic(dark: rgb(34, 35, 39), light: rgb(233, 237, 245))
 
     /// An active tab opens into the same canvas as the page above it, so the selected destination
     /// feels like an intentional cut-out of the bar rather than a second, competing blue button.
@@ -68,5 +68,5 @@ enum AwairaPalette {
     static let streak = dynamic(dark: rgb(255, 129, 22), light: rgb(254, 100, 0))
 
     /// Corner radius shared by every card: modestly softened, never pill-like.
-    static let cardRadius: CGFloat = 20
+    static let cardRadius: CGFloat = 9
 }

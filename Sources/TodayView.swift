@@ -35,9 +35,46 @@ struct TodayView: View {
 
     private var brandRow: some View {
         MobileBrandRow {
+            HStack(spacing: 8) {
+                cameraPill
+                settingsButton
+            }
+        }
+    }
+
+    /// The camera switch, and the app's only one — there is nowhere else in the design for it, so
+    /// losing it from the header left no way to pause detection at all. It reads as a state, not an
+    /// instruction: a lit dot and "Camera on" while detection runs, a dull one and "Camera off"
+    /// while it does not. The Mac says the same thing with the same two pieces.
+    private var cameraPill: some View {
+        Button(action: onToggleCamera) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isLive ? AwairaPalette.live : AwairaPalette.ink.opacity(0.3))
+                    .frame(width: 7, height: 7)
+                Text(isLive ? "Camera on" : "Camera off")
+                    .scaledFont(13, weight: .medium)
+                    .lineLimit(1)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.8))
+            }
+            .awairaPill(horizontal: 11, vertical: 7)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("toggleCamera")
+        .accessibilityLabel(isLive ? "Camera on" : "Camera off")
+        .animation(.easeInOut(duration: 0.15), value: isLive)
+    }
+
+    /// Detection is on because the user asked for it and has not switched it back off. Deliberately
+    /// the user's intent rather than `detector.connected`: capture also stops for a phone call or a
+    /// stashed PiP window, and the switch must not appear to flip itself in those moments.
+    private var isLive: Bool { cameraRequested && !detector.paused && detector.errorText == nil }
+
+    private var settingsButton: some View {
+        Group {
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
-                    .scaledFont(21, weight: .medium)
+                    .scaledFont(15)
                     .foregroundStyle(AwairaPalette.text)
                     .frame(width: 44, height: 44)
                     .background(AwairaPalette.statsSurface, in: Circle())
@@ -82,13 +119,22 @@ struct TodayView: View {
                     .foregroundStyle(tracked ? AwairaPalette.accent : AwairaPalette.ink.opacity(0.28))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
-                    .accessibilityIdentifier("todayCount")
                 if tracked {
                     Text("/hr")
                         .awairaFigure(26, weight: .medium)
                         .foregroundStyle(AwairaPalette.text)
                         .padding(.bottom, 11)
                 }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(detector.count)")
+                    .awairaFigure(22)
+                    .foregroundStyle(AwairaPalette.text)
+                    .accessibilityIdentifier("todayCount")
+                Text(detector.count == 1 ? "approach today" : "approaches today")
+                    .awairaCaption(14)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.6))
             }
 
             HStack(spacing: 8) {
@@ -102,18 +148,17 @@ struct TodayView: View {
             .background(awarenessTint.opacity(0.10), in: Capsule())
             .overlay(Capsule().strokeBorder(awarenessTint.opacity(0.32), lineWidth: 1))
 
-            HStack(alignment: .bottom, spacing: 14) {
-                Text(tracked ? "\(detector.preventedPulls) approaches\ninterrupted early" : "Tracking builds a\ngentle daily baseline")
-                    .awairaSubtitle(16)
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                AwarenessTrend(values: trendValues)
-                    .frame(width: 178, height: 134)
-            }
+            Text(tracked ? "\(detector.preventedPulls) approaches interrupted early"
+                         : "Tracking builds a gentle daily baseline")
+                .awairaCaption(14)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            AwarenessTrend(values: trendValues)
+                .frame(height: 96)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .awairaCard(padding: 20)
+        .awairaCard(padding: 16)
     }
 
     private var awarenessLabel: String {
@@ -204,23 +249,25 @@ struct TodayView: View {
                 Text("Next best moment")
                     .awairaCaption(14)
                     .foregroundStyle(AwairaPalette.ink.opacity(0.64))
-                HStack(spacing: 6) {
-                    Text("Peak window")
-                        .scaledFont(19, weight: .semibold)
-                        .foregroundStyle(AwairaPalette.text)
-                    Text("•")
-                        .foregroundStyle(AwairaPalette.ink.opacity(0.48))
-                    Text(peakWindowText)
-                        .scaledFont(19, weight: .semibold)
-                        .foregroundStyle(AwairaPalette.accent)
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.74)
+                Text("Peak window")
+                    .scaledFont(17, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.text)
+                    .lineLimit(1)
+                Text(peakWindowText)
+                    .awairaStat(14)
+                    .foregroundStyle(AwairaPalette.accent)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            Button("View guidance") { showingGuidance = true }
-                .buttonStyle(AwairaPrimaryButton())
-                .frame(width: 120)
+            Spacer(minLength: 8)
+            Button {
+                showingGuidance = true
+            } label: {
+                Text("Guidance")
+                    .scaledFont(13, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.accent)
+                    .awairaPill(horizontal: 14, vertical: 8)
+            }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity)
         .awairaCard(padding: 14)
