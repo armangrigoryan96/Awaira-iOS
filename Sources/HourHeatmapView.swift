@@ -23,10 +23,15 @@ struct HourHeatmapView: View {
     private static let gap: CGFloat = 4
     private static let captionWidth: CGFloat = 76
 
+    /// A fixed waking window, as in the design: showing only the hours that have activity would
+    /// stretch a handful of cells into long bars. The window only ever widens — for an early riser,
+    /// or past midnight.
+    private static let windowFrom = 6, windowTo = 22
+
     var body: some View {
-        let hours = DayHourWindow.hours(in: day)
+        let hours = self.hours
         let maxCount = hours.map { max($0.interruptions, $0.pulls) }.max() ?? 0
-        let peak = DayHourWindow.peak(in: hours, max: maxCount)
+        let peak = peakWindow(in: hours, max: maxCount)
 
         VStack(alignment: .leading, spacing: 10) {
             Text("Today, by hour")
@@ -165,6 +170,34 @@ struct HourHeatmapView: View {
     }
 
     // MARK: - Data
+
+    /// The day cropped to the display window. Hours the day has not reached yet still get a cell, so
+    /// the row keeps its shape from morning on rather than growing through the day.
+    private var hours: [MobileStatsStore.DayBar] {
+        let calendar = Calendar.current
+        let firstActive = day.first { $0.interruptions > 0 || $0.pulls > 0 }
+        let from = min(Self.windowFrom, firstActive.map { calendar.component(.hour, from: $0.date) }
+                                        ?? Self.windowFrom)
+        let lastActive = day.last { $0.interruptions > 0 || $0.pulls > 0 }
+        let to = max(Self.windowTo, lastActive.map { calendar.component(.hour, from: $0.date) }
+                                    ?? Self.windowTo)
+        guard from <= to else { return [] }
+        return day.filter { bar in
+            let hour = calendar.component(.hour, from: bar.date)
+            return hour >= from && hour <= to
+        }
+    }
+
+    /// The busiest hour plus the run of hours around it that are nearly as bad.
+    private func peakWindow(in hours: [MobileStatsStore.DayBar], max maxCount: Int) -> ClosedRange<Int>? {
+        guard maxCount > 0,
+              let peak = hours.firstIndex(where: { $0.interruptions == maxCount }) else { return nil }
+        let floor = Double(maxCount) * 0.8
+        var first = peak, last = peak
+        while first > 0, Double(hours[first - 1].interruptions) >= floor { first -= 1 }
+        while last < hours.count - 1, Double(hours[last + 1].interruptions) >= floor { last += 1 }
+        return first...last
+    }
 
     /// Position `count` on the ramp. Nothing at all stays a faint ghost cell rather than the ramp's
     /// coldest colour, so "quiet" and "not tracked" don't look alike.

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The Today screen, built from the same pieces as the Mac dashboard: the day at a glance, the
-/// hour-by-hour heatmap and the touch-location head, all on the design's page.
+/// The Today screen, built from the same pieces as the Mac dashboard: two headline numbers, the
+/// week strip, the hour-by-hour heatmap and the touch-location head, all on the design's page.
 ///
 /// Deliberately not a scroll view: the design puts the whole day on one screen, and the head is the
 /// one flexible element — it takes whatever height the cards above it leave, so the card below the
@@ -12,17 +12,12 @@ struct TodayView: View {
     let cameraRequested: Bool
     let onToggleCamera: () -> Void
     let onOpenSettings: () -> Void
-    /// Where a card's chevron leads: the fuller version of that card, which lives under Patterns.
-    let onOpenPatterns: () -> Void
 
     /// Which day the strip has selected; the heatmap follows it. `nil` means today.
     @State private var selectedDayID: String?
 
-    /// The gentle target, seeded at launch and changed in Settings.
-    @AppStorage(MobileGoal.storageKey) private var goalRate = MobileGoal.defaultRate
-
     /// Under a minute of tracking a rate says more about the clock than about the day.
-    private static let minTrackedSeconds = TodayGlanceCard.minTrackedSeconds
+    private static let minTrackedSeconds = 60.0
 
     var body: some View {
         GeometryReader { viewport in
@@ -30,30 +25,11 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     header
                     if let errorText = detector.errorText { errorBanner(errorText) }
-                    TodayGlanceCard(count: detector.count,
-                                    rate: tracked ? todayRate : nil,
-                                    weeklyImprovement: detector.weeklyImprovement,
-                                    week: detector.week,
-                                    selectedDayID: $selectedDayID,
-                                    onOpenDetail: onOpenPatterns)
-                    GoalProgressCard(goal: goalRate, current: tracked ? todayRate : nil)
-                    // Side by side, as in the design: the head answers "where" and the chart
-                    // answers "when", and the day reads as one thing when they sit together.
-                    HStack(alignment: .top, spacing: 12) {
-                        TouchZonesCard(counts: detector.zoneCounts,
-                                       onOpenDetail: onOpenPatterns)
-                        HourBarChartView(day: shownDay, onOpenDetail: onOpenPatterns)
-                    }
-                    WhatWasHappeningCard(prompt: detector.pendingContextPrompt,
-                                         counts: detector.contextCounts,
-                                         onAnswer: { choice, note in
-                                             guard let prompt = detector.pendingContextPrompt else { return }
-                                             detector.recordContext(choice, note: note, for: prompt)
-                                         },
-                                         onOpenDetail: onOpenPatterns)
-                    TodayStatusStrip(streakDays: detector.streakDays,
-                                     protectedSeconds: detector.activeSecondsToday,
-                                     cleanStreakHours: detector.cleanStreakHours)
+                    greeting
+                    tiles
+                    weekStrip
+                    HourHeatmapView(day: shownDay)
+                    TouchZonesCard(counts: detector.zoneCounts)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
@@ -70,27 +46,17 @@ struct TodayView: View {
 
     // MARK: - Header
 
-    /// The date sits under the wordmark rather than in a headline of its own. It is a label, not a
-    /// statement — the page below it is what the screen is about — and the line it used to occupy
-    /// is worth more to the cards.
     private var header: some View {
         HStack(spacing: 10) {
             Image("logo")
                 .resizable()
                 .scaledToFill()
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Awaira")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AwairaPalette.text)
-                Text(Self.dateFormatter.string(from: Date()))
-                    .font(.system(size: 13))
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.55))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+            Text("Awaira")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(AwairaPalette.text)
 
             Spacer(minLength: 8)
 
@@ -148,6 +114,130 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // MARK: - Date
+
+    private var greeting: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Self.dateFormatter.string(from: Date()))
+                .font(.system(size: 28, design: .serif))
+                .foregroundStyle(AwairaPalette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text("Awareness today. Progress tomorrow.")
+                .font(.system(size: 15))
+                .foregroundStyle(AwairaPalette.ink.opacity(0.55))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Headline numbers
+
+    private var tiles: some View {
+        HStack(spacing: 12) {
+            tile(label: "PER HOUR",
+                 value: tracked ? String(format: "%.0f", todayRate) : "—",
+                 suffix: tracked ? "/hr" : nil,
+                 tint: AwairaPalette.rate,
+                 symbol: "stopwatch",
+                 identifier: nil)
+
+            tile(label: "TOTAL APPROACHES",
+                 value: "\(detector.count)",
+                 suffix: nil,
+                 tint: AwairaPalette.accent,
+                 symbol: "waveform.path.ecg",
+                 identifier: "todayCount")
+        }
+    }
+
+    private func tile(label: String, value: String, suffix: String?, tint: Color,
+                      symbol: String, identifier: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 6) {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .kerning(0.6)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+                Image(systemName: symbol)
+                    .font(.system(size: 13))
+                    .foregroundStyle(tint)
+            }
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
+                Text(value)
+                    .font(.system(size: 36, design: .serif))
+                    .foregroundStyle(tint)
+                    .monospacedDigit()
+                    .accessibilityIdentifier(identifier ?? "")
+                if let suffix {
+                    Text(suffix)
+                        .font(.system(size: 18, design: .serif))
+                        .foregroundStyle(tint.opacity(0.85))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .awairaCard(padding: 12)
+    }
+
+    // MARK: - Week strip
+
+    private var weekStrip: some View {
+        HStack(spacing: 4) {
+            ForEach(detector.week) { day in
+                weekColumn(day)
+            }
+        }
+        .awairaCard(padding: 6)
+        .animation(.easeInOut(duration: 0.18), value: selectedDayID)
+    }
+
+    private func weekColumn(_ day: MobileStatsStore.DayBar) -> some View {
+        let isSelected = day.id == effectiveDayID
+        let dayTracked = day.activeSeconds >= Self.minTrackedSeconds
+        let rate = MobileStatsStore.hourlyRate(interruptions: day.interruptions,
+                                               activeSeconds: day.activeSeconds)
+
+        return Button {
+            selectedDayID = day.id
+        } label: {
+            VStack(spacing: 1) {
+                Text(Self.weekdayFormatter.string(from: day.date).uppercased())
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? AwairaPalette.navSelectedText.opacity(0.85)
+                                               : AwairaPalette.ink.opacity(0.6))
+                Text("\(Calendar.current.component(.day, from: day.date))")
+                    .font(.system(size: 21, design: .serif))
+                    .foregroundStyle(isSelected ? AwairaPalette.navSelectedText : AwairaPalette.text)
+                    .monospacedDigit()
+
+                // Present on every column and merely hidden on the untracked ones: an empty string
+                // would collapse to zero height and lift that column's icon above the others.
+                Text(String(format: "%.0f/hr", rate))
+                    .font(.system(size: 11))
+                    .foregroundStyle(isSelected ? AwairaPalette.navSelectedText.opacity(0.85)
+                                               : AwairaPalette.ink.opacity(0.7))
+                    .monospacedDigit()
+                    .opacity(dayTracked ? 1 : 0)
+
+                // Amber on every day, the selected one included: the plate turns blue under it, the
+                // icon does not change colour with it.
+                Image(systemName: "stopwatch")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AwairaPalette.rate)
+                    .opacity(dayTracked && day.interruptions > 0 ? 1 : 0)
+            }
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(isSelected ? AwairaPalette.navSelected : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Data
 
     /// The selected day, falling back to today whenever nothing is selected or the selection has
@@ -180,7 +270,13 @@ struct TodayView: View {
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("EEEE, MMM d")
+        f.setLocalizedDateFormatFromTemplate("EEEE, MMMM d")
+        return f
+    }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEE")
         return f
     }()
 }

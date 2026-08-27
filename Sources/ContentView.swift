@@ -40,9 +40,6 @@ struct ContentView: View {
         .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
-            // Before the first card is read, so the goal is never shown as the bare default to a
-            // user whose onboarding answer implies a different starting point. No-ops after that.
-            MobileGoal.seedIfNeeded()
             applyTiming()
             applyAlerts()
         }
@@ -61,10 +58,9 @@ struct ContentView: View {
             TodayView(detector: detector,
                       cameraRequested: cameraRequested,
                       onToggleCamera: toggleCamera,
-                      onOpenSettings: { selectedTab = .settings },
-                      onOpenPatterns: { selectedTab = .patterns })
+                      onOpenSettings: { selectedTab = .settings })
         case .patterns:
-            MobilePatternsView(detector: detector)
+            MobileInsightsView(detector: detector)
         case .reflect:
             // The reflection surface itself is still to come; the library is the calmest thing to
             // put here in the meantime, and it keeps the tab from being a dead end.

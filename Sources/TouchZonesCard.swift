@@ -6,34 +6,16 @@ import SwiftUI
 /// `counts` is today's tally from `Detector.zoneCounts` — today only, like the Mac's
 /// `zoneBreakdown`, so the head does not follow the week strip the way the heatmap does. Until the
 /// first classified touch of the day it is empty and the card shows its empty line.
-///
-/// At half the page's width there is no room beside the head, so the High/Medium/Low legend lives
-/// on the detail screen and the card states its finding in words instead: the colours are a ranking
-/// of one day's zones, and the two that lead it are the thing worth reading.
 struct TouchZonesCard: View {
-    /// Where the mirror preference lives, so the detail screen's switch and this card read the one
-    /// value rather than two copies of the same string.
-    static let mirroredKey = "touchZonesMirrored"
-
-    /// Presentation only: changing the map's orientation does not alter stored zone names, so the
-    /// ranking and the sentence below read the same either way.
-    ///
-    /// The switch itself is on the detail screen, not here: the eyebrow row is a link to that screen
-    /// and has a chevron in it already, and at half the page's width a control beside the title
-    /// would leave the title nothing to sit in.
-    @AppStorage(TouchZonesCard.mirroredKey) private var mirrored = true
-
     /// Per-zone totals for today, keyed the way the classifier names a zone ("cheek-right").
     var counts: [String: Int] = [:]
-    let onOpenDetail: () -> Void
 
     /// Where each zone's pill sits, in fractions of the head artwork (0,0 = its top-left corner).
     /// Measured off the artwork against a 5% grid, not estimated; re-measure if it is ever
     /// re-cropped, because the crop follows the silhouette.
     ///
-    /// "left"/"right" name the side the *person* touched, and these anchors place them as a mirror
-    /// would: your right cheek lights up the right of the picture. `mirrored` is what flips that for
-    /// anyone who reads the head as a portrait facing them instead.
+    /// "left"/"right" name the side the *person* touched, so the artwork reads like a mirror: your
+    /// right cheek lights up the right of the picture.
     ///
     /// This is every name the classifier can produce, all sixteen. Nothing here may be left out: a
     /// zone with no anchor is silently invisible however often it is touched.
@@ -56,62 +38,33 @@ struct TouchZonesCard: View {
         ("neck",         0.50, 0.780),
     ]
 
-    /// How each zone is named in a sentence. Every key in `anchors` needs one, or the summary line
-    /// would fall back to the classifier's own hyphenated id.
-    static let displayNames: [String: String] = [
-        "topofhead":    "Top of head",
-        "hair-left":    "Left hair",
-        "hair-right":   "Right hair",
-        "forehead":     "Forehead",
-        "temple-left":  "Left temple",
-        "temple-right": "Right temple",
-        "eye-left":     "Left eye",
-        "eye-right":    "Right eye",
-        "ear-left":     "Left ear",
-        "ear-right":    "Right ear",
-        "nose":         "Nose",
-        "cheek-left":   "Left cheek",
-        "cheek-right":  "Right cheek",
-        "mouth":        "Mouth",
-        "chin":         "Chin",
-        "neck":         "Neck",
-    ]
-
-    /// The legend's three colours, in the order the legend lists them. Shared with the detail
-    /// screen, which is where the legend itself now lives.
-    static let high = Color(hex: 0xFC8434)
-    static let medium = Color(hex: 0x16C795)
-    static let low = Color(hex: 0x0059E9)
+    /// The legend's three colours, in the order the legend lists them.
+    private static let high = Color(hex: 0xFC8434)
+    private static let medium = Color(hex: 0x16C795)
+    private static let low = Color(hex: 0x0059E9)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            titleRow
-            head
-                .frame(maxWidth: .infinity)
-            summary
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Touch locations")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AwairaPalette.text)
+
+            HStack(alignment: .center, spacing: 16) {
+                head
+                VStack(alignment: .leading, spacing: 12) {
+                    legend
+                    if counts.isEmpty {
+                        Text("No touches recorded yet today.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AwairaPalette.soft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .awairaCard(padding: 12)
-    }
-
-    private var titleRow: some View {
-        Button(action: onOpenDetail) {
-            HStack(spacing: 6) {
-                Text("TOUCH LOCATIONS")
-                    .font(.system(size: 11, weight: .medium))
-                    .kerning(0.6)
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.72))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.45))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("zonesDetail")
+        .awairaCard(padding: 14)
     }
 
     private var head: some View {
@@ -122,7 +75,7 @@ struct TouchZonesCard: View {
             .scaledToFit()
             // A definite cap, not `.infinity`: inside a scroll view the height proposal is
             // unbounded, and a head that grows into it would push the card past the fold.
-            .frame(maxWidth: 150, minHeight: 96, maxHeight: 170)
+            .frame(maxWidth: 160, minHeight: 96, maxHeight: 200)
             .overlay {
                 // Every zone that has been touched gets its pill, always in the same place. Ranking
                 // them and dropping collisions meant a number could vanish, or seem to jump to
@@ -131,7 +84,7 @@ struct TouchZonesCard: View {
                     ForEach(Self.anchors, id: \.zone) { anchor in
                         if let count = counts[anchor.zone], count > 0 {
                             pill(count, max: maxCount)
-                                .position(x: geo.size.width * displayX(for: anchor),
+                                .position(x: geo.size.width * anchor.x,
                                           y: geo.size.height * anchor.y)
                         }
                     }
@@ -145,60 +98,25 @@ struct TouchZonesCard: View {
         return Text("\(count)")
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
             .background(tint, in: Capsule())
     }
 
-    /// The card's finding in one sentence. Percentages are shares of the day's *classified* touches,
-    /// which is legitimately fewer than the day's approaches — a touch the classifier could not name
-    /// is counted by neither the head nor this line.
-    @ViewBuilder
-    private var summary: some View {
-        let ranked = Self.ranked(counts)
-        let total = counts.values.reduce(0, +)
-
-        if ranked.isEmpty || total == 0 {
-            Text("No touches recorded yet today.")
-                .font(.system(size: 12))
-                .foregroundStyle(AwairaPalette.soft)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            let body = Font.system(size: 12)
-            let strong = Font.system(size: 12, weight: .semibold)
-            let leading = Text("Most touched: ").font(body).foregroundStyle(AwairaPalette.ink.opacity(0.7))
-
-            (ranked.dropFirst().first.map { second in
-                leading
-                    + Self.phrase(ranked[0], total: total, body: body, strong: strong)
-                    + Text(" and ").font(body).foregroundStyle(AwairaPalette.ink.opacity(0.7))
-                    + Self.phrase(second, total: total, body: body, strong: strong)
-                    + Text(".").font(body).foregroundStyle(AwairaPalette.ink.opacity(0.7))
-            } ?? (leading
-                    + Self.phrase(ranked[0], total: total, body: body, strong: strong)
-                    + Text(".").font(body).foregroundStyle(AwairaPalette.ink.opacity(0.7))))
-                .fixedSize(horizontal: false, vertical: true)
+    private var legend: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            legendRow(Self.high, "High")
+            legendRow(Self.medium, "Medium")
+            legendRow(Self.low, "Low")
         }
     }
 
-    private static func phrase(_ entry: (zone: String, count: Int), total: Int,
-                               body: Font, strong: Font) -> Text {
-        let share = Int((Double(entry.count) / Double(total) * 100).rounded())
-        return Text(displayNames[entry.zone] ?? entry.zone)
-                .font(strong).foregroundStyle(AwairaPalette.text)
-            + Text(" (\(share)%)").font(body).foregroundStyle(AwairaPalette.ink.opacity(0.7))
-    }
-
-    /// Zones by count, busiest first. Ties break on the zone name so the sentence does not reword
-    /// itself between two equal zones on every refresh.
-    static func ranked(_ counts: [String: Int]) -> [(zone: String, count: Int)] {
-        counts.filter { $0.value > 0 }
-            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
-            .map { (zone: $0.key, count: $0.value) }
-    }
-
-    /// The original map is mirrored; the alternative swaps the visual left/right positions.
-    private func displayX(for anchor: (zone: String, x: CGFloat, y: CGFloat)) -> CGFloat {
-        mirrored ? anchor.x : 1 - anchor.x
+    private func legendRow(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 9) {
+            Circle().fill(color).frame(width: 9, height: 9)
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundStyle(AwairaPalette.ink.opacity(0.75))
+        }
     }
 }

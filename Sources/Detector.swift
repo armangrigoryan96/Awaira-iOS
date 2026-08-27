@@ -39,15 +39,6 @@ final class Detector: NSObject, ObservableObject {
     /// Today's completed touches per head zone, keyed by `ZoneHit.name` — what the Today page's
     /// head draws a number over.
     @Published private(set) var zoneCounts: [String: Int] = [:]
-    /// Today's answers to "What was happening?", keyed by `MobileContextChoice.id`.
-    @Published private(set) var contextCounts: [String: Int] = [:]
-    /// The touch the context card is currently asking about, or `nil` when there is nothing recent
-    /// enough to attach context to. The card stays on the page either way and simply dims.
-    @Published private(set) var pendingContextPrompt: MobileContextPrompt?
-    /// Consecutive days with at least one recorded approach.
-    @Published private(set) var streakDays = 0
-    /// Yesterday's longest quiet run, in hours — `nil` when yesterday was not tracked enough to say.
-    @Published private(set) var cleanStreakHours: Int?
     @Published private(set) var lastDetection: Date?
     @Published var fps = 0.0
     @Published var hasFace = false
@@ -475,52 +466,7 @@ final class Detector: NSObject, ObservableObject {
         weeklyRate = snapshot.weeklyRate
         weeklyImprovement = snapshot.weeklyImprovement
         zoneCounts = snapshot.todayZones
-        contextCounts = snapshot.todayContexts
-        streakDays = snapshot.streakDays
-        cleanStreakHours = snapshot.cleanStreakHours
         lastDetection = snapshot.lastDetection
-    }
-
-    // MARK: - Context ("What was happening?")
-
-    /// How long the context card stays answerable after a touch. Long enough to notice the card,
-    /// read the chips and pick one; short enough that the answer is still about *that* touch.
-    static let contextPromptLifetime: TimeInterval = 300
-
-    /// Opens the card for the touch that just ended. Called from the capture queue.
-    private func askForContext(at date: Date) {
-        let prompt = MobileContextPrompt(id: UUID(), timestamp: date)
-        onMain {
-            self.pendingContextPrompt = prompt
-            // The prompt is about one touch and goes stale — let it go if it has not been answered
-            // or dismissed by then, rather than filing an answer against a moment nobody recalls.
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.contextPromptLifetime) { [weak self] in
-                guard let self else { return }
-                if self.pendingContextPrompt?.id == prompt.id { self.pendingContextPrompt = nil }
-            }
-        }
-    }
-
-    /// Files one answer, and the note that came with it, against the moment the prompt is about.
-    ///
-    /// The store is written on the capture queue like every other tally — it is not safe to touch
-    /// from the main thread while detection is running. The note is not: `MobileNotesStore` is its
-    /// own UserDefaults list, read and written from the UI only.
-    func recordContext(_ choice: MobileContextChoice, note: String, for prompt: MobileContextPrompt) {
-        onMain { if self.pendingContextPrompt?.id == prompt.id { self.pendingContextPrompt = nil } }
-        MobileNotesStore.add(note, context: choice.id, at: prompt.timestamp)
-        captureQueue.async { [weak self] in
-            guard let self else { return }
-            self.stats.recordContext(choice.id, at: prompt.timestamp)
-            let snapshot = self.stats.snapshot()
-            self.onMain { self.applyStats(snapshot) }
-        }
-    }
-
-    func dismissContextPrompt(_ prompt: MobileContextPrompt) {
-        onMain {
-            if self.pendingContextPrompt?.id == prompt.id { self.pendingContextPrompt = nil }
-        }
     }
 }
 
@@ -615,12 +561,7 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         let wallClockNow = Date()
         if out.didStartTouch { stats.recordDetection(at: wallClockNow) }
-        if out.didEndTouch {
-            stats.recordOutcome(sustained: out.touchWasPull, at: wallClockNow)
-            // On the falling edge, not the rising one: asking while the hand is still on the face
-            // is asking someone to answer a question about a thing they are in the middle of.
-            askForContext(at: wallClockNow)
-        }
+        if out.didEndTouch { stats.recordOutcome(sustained: out.touchWasPull, at: wallClockNow) }
 
         // Zone labelling. Runs *after* the core has spoken and only reads its result — a touch is
         // counted, extended and ended exactly as it was before this existed. A touch the classifier

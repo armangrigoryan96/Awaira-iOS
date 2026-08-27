@@ -17,13 +17,6 @@ final class MobileStatsStore {
         /// non-optional property's synthesized decoder fails on a missing key, and one failure here
         /// throws away the whole stored history.
         var zoneCounts: [String: Int]?
-        /// Tracked seconds by hour — what turns the hour chart's counts into a rate. Optional for
-        /// the same reason as `hourlyPulls`: a day stored before this existed reads back as an
-        /// untracked one rather than throwing away the whole history.
-        var hourlyActiveSeconds: [Double]?
-        /// Answers to "What was happening?", keyed by `MobileContextChoice.id`. Optional for the
-        /// same reason as the fields above.
-        var contextCounts: [String: Int]?
         var lastDetection: TimeInterval?
 
         /// The stored array padded to 24, so callers can index it by hour without checking.
@@ -32,19 +25,8 @@ final class MobileStatsStore {
             return hourlyPulls
         }
 
-        /// The same, for tracked seconds.
-        var activeSecondsByHour: [Double] {
-            guard let hourlyActiveSeconds, hourlyActiveSeconds.count == 24 else {
-                return Array(repeating: 0, count: 24)
-            }
-            return hourlyActiveSeconds
-        }
-
         /// The zone tally, empty rather than nil for a day stored before this existed.
         var zones: [String: Int] { zoneCounts ?? [:] }
-
-        /// The same, for context answers.
-        var contexts: [String: Int] { contextCounts ?? [:] }
     }
 
     struct DayBar: Identifiable {
@@ -73,13 +55,6 @@ final class MobileStatsStore {
         /// Today's touches per head zone. Today only, like the Mac's `zoneBreakdown` — the head on
         /// the Today page does not follow the week strip's selection the way the heatmap does.
         let todayZones: [String: Int]
-        /// Today's answers to "What was happening?", scoped the same way as `todayZones`.
-        let todayContexts: [String: Int]
-        /// Consecutive days with at least one recorded approach.
-        let streakDays: Int
-        /// Yesterday's longest run of hours with nothing recorded, or `nil` when yesterday was not
-        /// tracked enough to say.
-        let cleanStreakHours: Int?
         let lastDetection: Date?
     }
 
@@ -103,16 +78,7 @@ final class MobileStatsStore {
 
     func addActive(seconds: TimeInterval, at date: Date) {
         guard seconds.isFinite, seconds > 0 else { return }
-        let capped = min(seconds, 1)
-        mutateDay(for: date) {
-            $0.activeSeconds += capped
-            // The same second, also filed under its hour, so the chart can divide a count by the
-            // time actually spent tracking that hour rather than by the whole day.
-            let hour = Calendar.current.component(.hour, from: date)
-            var hourly = $0.activeSecondsByHour
-            if hourly.indices.contains(hour) { hourly[hour] += capped }
-            $0.hourlyActiveSeconds = hourly
-        }
+        mutateDay(for: date) { $0.activeSeconds += min(seconds, 1) }
         saveIfNeeded()
     }
 
@@ -149,17 +115,6 @@ final class MobileStatsStore {
             var zones = $0.zones
             zones[name, default: 0] += 1
             $0.zoneCounts = zones
-        }
-        save(force: true)
-    }
-
-    /// One answer to "What was happening?", filed under the day the *touch* happened on — not the
-    /// day the user got round to answering, which can be the next one either side of midnight.
-    func recordContext(_ id: String, at date: Date) {
-        mutateDay(for: date) {
-            var contexts = $0.contexts
-            contexts[id, default: 0] += 1
-            $0.contextCounts = contexts
         }
         save(force: true)
     }
@@ -216,58 +171,7 @@ final class MobileStatsStore {
                         week: week, hourOfWeek: hourly, weeklyTotal: weeklyTotal,
                         weeklyRate: weeklyRate, weeklyImprovement: improvement,
                         todayZones: today.zones,
-                        todayContexts: today.contexts,
-                        streakDays: streakValue(todayStart: todayStart, calendar: calendar),
-                        cleanStreakHours: cleanStreakValue(todayStart: todayStart, calendar: calendar),
                         lastDetection: mostRecent.map(Date.init(timeIntervalSince1970:)))
-    }
-
-    /// Consecutive days with at least one recorded approach — the day-to-day "you showed up" run,
-    /// ported from the Mac's `streakValue()`.
-    ///
-    /// One deliberate difference: a today that has recorded nothing *yet* does not break the run.
-    /// The Mac starts counting at today and stops immediately, so a thirty-day streak reads as zero
-    /// every morning and snaps back at the first touch — that measures the clock, not the habit.
-    /// Here today only joins the run once it has something, and until then the run is read from
-    /// yesterday.
-    private func streakValue(todayStart: Date, calendar: Calendar) -> Int {
-        var offset = (days[key(for: todayStart)]?.interruptions ?? 0) >= 1 ? 0 : 1
-        var count = 0
-        while offset < 366 {
-            guard let date = calendar.date(byAdding: .day, value: -offset, to: todayStart),
-                  let day = days[key(for: date)], day.interruptions >= 1 else { break }
-            count += 1
-            offset += 1
-        }
-        return count
-    }
-
-    /// Yesterday's longest run of consecutive hours with nothing recorded, measured only between
-    /// its first and last approach — the quiet before the day started and after it ended is not an
-    /// achievement.
-    ///
-    /// Yesterday rather than today, as on the Mac: today is unfinished, so its longest quiet run is
-    /// really just "time since the last touch" and would climb all day on its own.
-    private func cleanStreakValue(todayStart: Date, calendar: Calendar) -> Int? {
-        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: todayStart),
-              let day = days[key(for: yesterday)],
-              // Under half an hour of tracking, a quiet stretch means the camera was off.
-              day.activeSeconds >= 1800 else { return nil }
-        let counts = day.hourlyInterruptions
-        guard let firstActive = counts.firstIndex(where: { $0 > 0 }),
-              let lastActive = counts.lastIndex(where: { $0 > 0 }),
-              firstActive < lastActive else { return nil }
-
-        var best = 0, current = 0
-        for hour in firstActive...lastActive {
-            if counts[hour] == 0 {
-                current += 1
-                best = max(best, current)
-            } else {
-                current = 0
-            }
-        }
-        return best > 0 ? best : nil
     }
 
     /// One day, hour by hour — what the heatmap draws. A day with nothing stored still returns 24
@@ -275,7 +179,6 @@ final class MobileStatsStore {
     private static func hourBars(for day: Day, on start: Date) -> [DayBar] {
         let calendar = Calendar.current
         let pulls = day.pullsByHour
-        let active = day.activeSecondsByHour
         return (0..<24).map { hour in
             let date = calendar.date(byAdding: .hour, value: hour, to: start) ?? start
             return DayBar(id: "h\(hour)", date: date,
@@ -283,23 +186,13 @@ final class MobileStatsStore {
                                          ? day.hourlyInterruptions[hour] : 0,
                           prevented: 0,
                           pulls: pulls.indices.contains(hour) ? pulls[hour] : 0,
-                          activeSeconds: active.indices.contains(hour) ? active[hour] : 0)
+                          activeSeconds: 0)
         }
     }
 
-    /// Warm-up for a bucket spanning a whole day or more: one hour of tracked time. A young bucket
-    /// otherwise divides by minutes and reads as thousands per hour.
-    static let dayWarmUp = 3600.0
-
-    /// Warm-up for a single hour-of-day bucket, which can never hold more than an hour of tracking.
-    /// A full-hour floor would flatten those into raw counts, so they warm up in a quarter — the
-    /// same pair of windows the Mac uses (`frontend/Sources/HourlyRate.swift`).
-    static let hourWarmUp = 900.0
-
-    static func hourlyRate(interruptions: Int, activeSeconds: Double,
-                           warmUp: Double = dayWarmUp) -> Double {
+    static func hourlyRate(interruptions: Int, activeSeconds: Double) -> Double {
         guard interruptions > 0, activeSeconds > 0 else { return 0 }
-        return Double(interruptions) / (max(activeSeconds, warmUp) / 3600)
+        return Double(interruptions) / (max(activeSeconds, 3600) / 3600)
     }
 
     private func mutateDay(for date: Date, _ body: (inout Day) -> Void) {

@@ -30,24 +30,21 @@ enum AwairaPalette {
     static let alert = dynamic(dark: rgb(255, 140, 114), light: rgb(190, 72, 60))
     static let live = accent
 
-    // Surfaces. Dark is the Mac's neutral system — an almost-black canvas, graphite cards, crisp
-    // grey edges — rather than the navy the 2026-08 mockups gave the phone: colour is reserved for
-    // status and data, and the shell itself stays quiet. Light stays the soft near-white system.
-    static let window = dynamic(dark: rgb(14, 15, 17), light: rgb(244, 246, 250))
-    /// Card fill — graphite, a step off the page in dark, so the background is visible *around* a
-    /// card rather than through it.
-    static let statsSurface = dynamic(dark: rgb(29, 30, 34), light: rgb(250, 251, 253))
+    // Surfaces. Dark is navy, not near-black: #00223C for the page and every card, as in the
+    // 2026-08 mockups. Light stays the soft near-white system.
+    static let window = dynamic(dark: rgb(0, 34, 60), light: rgb(244, 246, 250))
+    /// Card fill — deliberately the page's own colour in dark, where a card is its hairline and
+    /// nothing else.
+    static let statsSurface = dynamic(dark: rgb(0, 34, 60), light: rgb(250, 251, 253))
 
-    /// The hairline that outlines a card, and the same line that outlines the header pills. A solid
-    /// grey in dark, not white at an opacity: over near-black a wash of white has almost nothing to
-    /// tint, and the edge goes soft exactly where the design wants it crisp.
-    static let cardBorder = dynamic(dark: rgb(62, 65, 72),
+    /// The hairline that *is* a card, and the same line that outlines the header pills.
+    static let cardBorder = dynamic(dark: UIColor(white: 1, alpha: 0.12),
                                     light: UIColor(red: 26 / 255.0, green: 34 / 255.0,
                                                    blue: 48 / 255.0, alpha: 0.08))
 
-    /// The tab bar: in dark the raised surface above the page, as the Mac's rail is; in light the
-    /// same colour as the page, separated by nothing but the hairline.
-    static let sidebar = dynamic(dark: rgb(34, 35, 39), light: rgb(243, 246, 251))
+    /// The tab bar: in dark the one surface deeper than the page; in light the same colour as the
+    /// page, separated by nothing but the hairline.
+    static let sidebar = dynamic(dark: rgb(0, 23, 42), light: rgb(243, 246, 251))
 
     /// A selected navigation item is a solid blue plate with white text, not an accent tint.
     static let navSelected = dynamic(dark: rgb(27, 87, 201), light: rgb(47, 123, 238))

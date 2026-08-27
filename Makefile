@@ -12,8 +12,8 @@ BUNDLE_ID   := com.awaira.ios
 # The real thing only works on a real iPhone — the simulator has no camera and no
 # Picture-in-Picture. `make device` is the one that matters; override DEVICE with another UDID
 # (`xcrun xctrace list devices`) to use a different phone.
-DEVICE      ?= 00008030-00112C9C213A802E
-TEAM        ?= XYA58M54V2
+DEVICE      ?= 00008130-001A0C610EF3803A
+TEAM        ?= S6HG6FS5JJ
 DEVICE_DEST := platform=iOS,id=$(DEVICE)
 
 .PHONY: help install generate build test unit run device clean
@@ -58,21 +58,12 @@ run: build
 	xcrun simctl launch booted $(BUNDLE_ID)
 
 device: generate
-	@BUILD_LOG=$$(mktemp -t awaira-ios-build); \
-	if xcodebuild build -project $(PROJECT) -scheme $(SCHEME) \
-		-destination "$(DEVICE_DEST)" -derivedDataPath build-device \
-		-allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM) >"$$BUILD_LOG" 2>&1; then \
-		tail -5 "$$BUILD_LOG"; \
-	else \
-		tail -50 "$$BUILD_LOG"; \
-		rm -f "$$BUILD_LOG"; \
-		echo "❌ Build failed — the app was not installed or launched."; \
-		echo "   Sign in to Xcode with an Apple ID that belongs to team $(TEAM), then retry: make mobile-run-app"; \
-		exit 1; \
-	fi; \
-	rm -f "$$BUILD_LOG"
-	@APP="build-device/Build/Products/Debug-iphoneos/Awaira.app"; \
-	[ -d "$$APP" ] || { echo "❌ Build succeeded but no app was produced at $$APP"; exit 1; }; \
+	xcodebuild build -project $(PROJECT) -scheme $(SCHEME) \
+		-destination "$(DEVICE_DEST)" -allowProvisioningUpdates \
+		DEVELOPMENT_TEAM=$(TEAM) | tail -5
+	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
+		-destination "$(DEVICE_DEST)" -showBuildSettings 2>/dev/null \
+		| awk -F' = ' '/ BUILT_PRODUCTS_DIR /{d=$$2} / FULL_PRODUCT_NAME /{n=$$2} END{print d"/"n}'); \
 	xcrun devicectl device install app --device $(DEVICE) "$$APP" | grep -E 'App installed|bundleID'
 	@xcrun devicectl device process launch --device $(DEVICE) \
 		--terminate-existing $(BUNDLE_ID) | tail -1

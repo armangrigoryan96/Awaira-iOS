@@ -36,7 +36,6 @@ struct MobileSettingsView: View {
     @Binding var blurEnabled: Bool
 
     @AppStorage("mobileAppearance") private var appearance = MobileAppearance.system.rawValue
-    @AppStorage(MobileGoal.storageKey) private var goalRate = MobileGoal.defaultRate
 
     /// What the theme row shows on its right-hand side, falling back to System for a value the app
     /// no longer recognises.
@@ -75,31 +74,7 @@ struct MobileSettingsView: View {
                 } header: {
                     Text("Appearance")
                 } footer: {
-                    Text("Dark keeps the dashboard on the design's near-black; System follows iOS.")
-                }
-
-                Section {
-                    // Same shape as the Theme row above, and for the same reasons: a dropdown
-                    // anchored to the value at the right edge, without the menu style's ⌃⌄ glyph.
-                    LabeledContent("Touches per hour") {
-                        Menu {
-                            Picker("Touches per hour", selection: $goalRate) {
-                                ForEach(MobileGoal.choices, id: \.self) { option in
-                                    Text(String(format: "%.0f/hr", option)).tag(option)
-                                }
-                            }
-                        } label: {
-                            Text(String(format: "Under %.0f/hr", goalRate))
-                                .foregroundStyle(AwairaPalette.ink.opacity(0.55))
-                                .padding(.vertical, 6)
-                                .contentShape(Rectangle())
-                        }
-                        .accessibilityIdentifier("goalRatePicker")
-                    }
-                } header: {
-                    Text("Goal")
-                } footer: {
-                    Text("Today measures your rate against this. It starts from your onboarding estimate — move it once you've seen a few real days.")
+                    Text("Dark keeps the dashboard on the design's navy; System follows iOS.")
                 }
 
                 Section {
