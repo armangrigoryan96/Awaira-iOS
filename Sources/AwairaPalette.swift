@@ -26,27 +26,40 @@ enum AwairaPalette {
     static let muted = ink.opacity(0.55)
     static let soft = ink.opacity(0.42)
 
-    static let accent = dynamic(dark: rgb(70, 200, 180), light: rgb(8, 122, 108))
+    /// Sampled from Awaira's blue app mark. It owns the neutral, measurable product language:
+    /// dashboard figures, selected controls, and progress.
+    ///
+    /// This used to be the teal below, which made the phone disagree with the Mac on the one colour
+    /// the product is named by — and left green doing two jobs at once. Green is now only ever the
+    /// literal live/on-device state, exactly as on the desktop.
+    static let accent = dynamic(dark: rgb(37, 160, 231), light: rgb(19, 113, 181))
     static let alert = dynamic(dark: rgb(255, 140, 114), light: rgb(190, 72, 60))
-    static let live = accent
+
+    /// Reserved for the literal live/on-device state — the camera dot, and nothing else.
+    static let live = dynamic(dark: rgb(29, 198, 178), light: rgb(8, 122, 108))
+
+    /// The quiet slate the desktop gives a figure that is data rather than status.
+    static let figure = Color(red: 138.0 / 255.0, green: 160.0 / 255.0, blue: 187.0 / 255.0)
 
     // The mobile dashboard follows the current desktop treatment: a near-black page with graphite
     // cards, rather than the older navy shell.
     static let window = dynamic(dark: rgb(14, 15, 17), light: rgb(244, 246, 250))
-    static let statsSurface = dynamic(dark: rgb(29, 30, 34), light: rgb(250, 251, 253))
+    static let statsSurface = dynamic(dark: rgb(18, 22, 29), light: rgb(250, 251, 253))
 
     /// The hairline that *is* a card, and the same line that outlines the header pills.
-    static let cardBorder = dynamic(dark: UIColor(white: 1, alpha: 0.12),
+    static let cardBorder = dynamic(dark: rgb(48, 53, 63),
                                     light: UIColor(red: 26 / 255.0, green: 34 / 255.0,
                                                    blue: 48 / 255.0, alpha: 0.08))
 
-    /// The tab bar: in dark the one surface deeper than the page; in light the same colour as the
-    /// page, separated by nothing but the hairline.
-    static let sidebar = dynamic(dark: rgb(20, 21, 24), light: rgb(243, 246, 251))
+    /// The tab bar. On the Mac the navigation rail is the *raised* graphite surface above the black
+    /// workspace; the phone's bar now matches it, rather than being the one surface deeper than the
+    /// page. That is what lets the selected tab read as an opening cut through the bar.
+    static let sidebar = dynamic(dark: rgb(18, 22, 29), light: rgb(233, 237, 245))
 
-    /// A selected navigation item is a solid blue plate with white text, not an accent tint.
-    static let navSelected = dynamic(dark: rgb(27, 87, 201), light: rgb(47, 123, 238))
-    static let navSelectedText = Color.white
+    /// An active tab opens into the same canvas as the page above it, so the selected destination
+    /// feels like an intentional cut-out of the bar rather than a second, competing blue button.
+    static let navSelected = window
+    static let navSelectedText = ink
 
     /// The amber the design gives the headline rate — the top of the heatmap's ramp, so the busiest
     /// cell and the number over it are the same colour.
@@ -54,6 +67,6 @@ enum AwairaPalette {
 
     static let streak = dynamic(dark: rgb(255, 129, 22), light: rgb(254, 100, 0))
 
-    /// Corner radius shared by every card.
-    static let cardRadius: CGFloat = 10
+    /// Corner radius shared by every card: modestly softened, never pill-like.
+    static let cardRadius: CGFloat = 20
 }

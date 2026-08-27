@@ -11,6 +11,9 @@ import SwiftUI
 struct HourHeatmapView: View {
     /// One bar per hour, as `MobileStatsStore` builds them.
     let day: [MobileStatsStore.DayBar]
+    /// Whether `day` is actually today. The card used to be titled "Today, by hour" no matter which
+    /// day the week strip had selected, which made it claim to show today while showing Tuesday.
+    var isToday = true
 
     /// The ramp, lifted from the design mockup.
     private static let stops: [Color] = [
@@ -34,9 +37,7 @@ struct HourHeatmapView: View {
         let peak = peakWindow(in: hours, max: maxCount)
 
         VStack(alignment: .leading, spacing: 10) {
-            Text("Today, by hour")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(AwairaPalette.text)
+            MobileCardHeader(title: isToday ? "Today, by hour" : "That day, by hour")
 
             // Every row is one HStack sharing the same column geometry, and the cells size
             // themselves by aspect ratio rather than by a measured width. That keeps the captions on
@@ -65,7 +66,7 @@ struct HourHeatmapView: View {
             Group {
                 if let caption {
                     Text(caption)
-                        .font(.system(size: 12))
+                        .scaledFont(11)
                         .foregroundStyle(AwairaPalette.ink.opacity(0.7))
                         .minimumScaleFactor(0.8)
                 } else {
@@ -83,7 +84,7 @@ struct HourHeatmapView: View {
         HStack(spacing: Self.gap) {
             ForEach(Array(hours.enumerated()), id: \.offset) { index, bar in
                 Text(index % 2 == 0 ? Self.hourLabel(bar.date) : " ")
-                    .font(.system(size: 9))
+                    .scaledFont(9)
                     .foregroundStyle(AwairaPalette.ink.opacity(0.55))
                     .lineLimit(1)
                     .fixedSize()
@@ -139,7 +140,7 @@ struct HourHeatmapView: View {
                 let step = geo.size.width / CGFloat(hours.count)
                 let mid = (CGFloat(peak.lowerBound) + CGFloat(peak.upperBound) + 1) / 2 * step
                 Text("Peak window")
-                    .font(.system(size: 10))
+                    .scaledFont(10)
                     .foregroundStyle(Self.peakTint)
                     .fixedSize()
                     .position(x: min(max(mid, 36), max(36, geo.size.width - 36)), y: 7)
@@ -190,9 +191,13 @@ struct HourHeatmapView: View {
 
     /// The busiest hour plus the run of hours around it that are nearly as bad.
     private func peakWindow(in hours: [MobileStatsStore.DayBar], max maxCount: Int) -> ClosedRange<Int>? {
-        guard maxCount > 0,
-              let peak = hours.firstIndex(where: { $0.interruptions == maxCount }) else { return nil }
-        let floor = Double(maxCount) * 0.8
+        // Deliberately the approaches row's own maximum, not the shared one passed in for the ramp:
+        // when the busiest cell of the day was an interrupted one, `maxCount` named a value the
+        // approaches row never reaches and the bracket disappeared from an otherwise busy day.
+        let rowMax = hours.map(\.interruptions).max() ?? 0
+        guard maxCount > 0, rowMax > 0,
+              let peak = hours.firstIndex(where: { $0.interruptions == rowMax }) else { return nil }
+        let floor = Double(rowMax) * 0.8
         var first = peak, last = peak
         while first > 0, Double(hours[first - 1].interruptions) >= floor { first -= 1 }
         while last < hours.count - 1, Double(hours[last + 1].interruptions) >= floor { last += 1 }

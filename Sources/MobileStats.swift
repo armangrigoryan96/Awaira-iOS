@@ -47,6 +47,7 @@ final class MobileStatsStore {
         /// must not be read from the main thread while detection is writing to it.
         let hoursByDay: [String: [DayBar]]
         let week: [DayBar]
+        let history: [DayBar]
         let hourOfWeek: [Int]
         let weeklyTotal: Int
         let weeklyRate: Double
@@ -55,6 +56,8 @@ final class MobileStatsStore {
         /// Today's touches per head zone. Today only, like the Mac's `zoneBreakdown` — the head on
         /// the Today page does not follow the week strip's selection the way the heatmap does.
         let todayZones: [String: Int]
+        /// Zone totals keyed by day, so the selected day on Today drives the head as well as the chart.
+        let zonesByDay: [String: [String: Int]]
         let lastDetection: Date?
     }
 
@@ -124,7 +127,7 @@ final class MobileStatsStore {
         let todayKey = key(for: now)
         let today = days[todayKey] ?? Day()
         let todayStart = calendar.startOfDay(for: now)
-        let week = (0..<7).reversed().compactMap { offset -> DayBar? in
+        let history = (0..<365).reversed().compactMap { offset -> DayBar? in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: todayStart) else { return nil }
             let id = key(for: date)
             let day = days[id] ?? Day()
@@ -132,6 +135,7 @@ final class MobileStatsStore {
                           prevented: day.prevented, pulls: day.pulls,
                           activeSeconds: day.activeSeconds)
         }
+        let week = Array(history.suffix(7))
         let weeklyTotal = week.reduce(0) { $0 + $1.interruptions }
         let weeklySeconds = week.reduce(0.0) { $0 + $1.activeSeconds }
         let weeklyRate = Self.hourlyRate(interruptions: weeklyTotal, activeSeconds: weeklySeconds)
@@ -160,17 +164,21 @@ final class MobileStatsStore {
             if let last = day.lastDetection, last > (mostRecent ?? 0) { mostRecent = last }
         }
         var hoursByDay: [String: [DayBar]] = [:]
-        for bar in week {
-            hoursByDay[bar.id] = Self.hourBars(for: days[bar.id] ?? Day(),
+        var zonesByDay: [String: [String: Int]] = [:]
+        for bar in history {
+            let day = days[bar.id] ?? Day()
+            hoursByDay[bar.id] = Self.hourBars(for: day,
                                                on: calendar.startOfDay(for: bar.date))
+            zonesByDay[bar.id] = day.zones
         }
 
         return Snapshot(today: today,
                         todayHours: hoursByDay[todayKey] ?? Self.hourBars(for: today, on: todayStart),
                         hoursByDay: hoursByDay,
-                        week: week, hourOfWeek: hourly, weeklyTotal: weeklyTotal,
+                        week: week, history: history, hourOfWeek: hourly, weeklyTotal: weeklyTotal,
                         weeklyRate: weeklyRate, weeklyImprovement: improvement,
                         todayZones: today.zones,
+                        zonesByDay: zonesByDay,
                         lastDetection: mostRecent.map(Date.init(timeIntervalSince1970:)))
     }
 

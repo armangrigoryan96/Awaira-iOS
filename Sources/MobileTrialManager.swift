@@ -247,24 +247,28 @@ struct MobileLicenseEntryView: View {
     private let checkoutURL = URL(string: "https://awaira.lemonsqueezy.com/checkout/buy/a612bf42-ca5b-4232-b2e5-b31f50df5710")!
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             Image(systemName: "key.fill")
-                .font(.system(size: 36, weight: .medium))
-                .foregroundStyle(.indigo)
-                .frame(width: 76, height: 76)
-                .background(.indigo.opacity(0.12), in: Circle())
+                .scaledFont(32, weight: .medium)
+                .foregroundStyle(AwairaPalette.accent)
+                .frame(width: 72, height: 72)
+                .background(AwairaPalette.accent.opacity(0.12), in: Circle())
 
-            Text("Unlock Awaira")
-                .font(.system(size: 29, weight: .bold, design: .rounded))
-                .multilineTextAlignment(.center)
-            Text("Your trial has ended. Enter the licence key from your purchase email to continue.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 6) {
+                Text("Unlock Awaira")
+                    .awairaDisplay(27)
+                    .foregroundStyle(AwairaPalette.text)
+                    .multilineTextAlignment(.center)
+                Text("Your trial has ended. Enter the licence key from your purchase email to continue.")
+                    .awairaSubtitle()
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             TextField("AWRA-XXXX-XXXX-XXXX", text: $keyText)
                 .font(.system(.body, design: .monospaced).weight(.semibold))
+                .foregroundStyle(AwairaPalette.text)
                 .multilineTextAlignment(.center)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
@@ -274,49 +278,58 @@ struct MobileLicenseEntryView: View {
                 .onSubmit(activate)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 16)
-                .background(.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.separator, lineWidth: 1) }
+                .background(AwairaPalette.statsSurface,
+                            in: RoundedRectangle(cornerRadius: AwairaPalette.cardRadius,
+                                                 style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AwairaPalette.cardRadius, style: .continuous)
+                        .strokeBorder(AwairaPalette.cardBorder, lineWidth: 1)
+                }
+                .padding(.top, 4)
 
             if let message = errorMessage {
                 Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.orange.opacity(0.95))
+                    .awairaCaption()
+                    .foregroundStyle(AwairaPalette.alert)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Button(action: activate) {
                 Group {
-                    if license.checking { ProgressView().tint(.black) }
-                    else { Text("Activate licence") }
+                    if license.checking {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Activate licence")
+                    }
                 }
-                .font(.body.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .background(.indigo, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .disabled(license.checking || keyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(AwairaPrimaryButton(enabled: !activateDisabled))
+            .disabled(activateDisabled)
 
             Link("Buy a licence", destination: checkoutURL)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.indigo)
+                .scaledFont(14, weight: .semibold)
+                .foregroundStyle(AwairaPalette.accent)
                 .padding(.top, 2)
 
             Text("A licence is activated on one device at a time. You can remove it in Settings to transfer it later.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .scaledFont(12)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.5))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(32)
+        .padding(28)
         .frame(maxWidth: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(AwairaPalette.window.ignoresSafeArea())
         .onAppear {
             keyText = license.key ?? ""
             keyFocused = keyText.isEmpty
         }
+    }
+
+    private var activateDisabled: Bool {
+        license.checking || keyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func activate() {
@@ -340,13 +353,13 @@ struct MobileLicenseEntryView: View {
 struct MobileAccessCheckingView: View {
     var body: some View {
         VStack(spacing: 14) {
-            ProgressView().tint(.indigo)
+            ProgressView().tint(AwairaPalette.accent)
             Text("Checking your access…")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .awairaSubtitle()
+                .foregroundStyle(AwairaPalette.ink.opacity(0.55))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(AwairaPalette.window.ignoresSafeArea())
     }
 }
 
@@ -356,18 +369,19 @@ struct MobileTrialExpiredView: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "hourglass")
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(.indigo)
+                .scaledFont(34, weight: .medium)
+                .foregroundStyle(AwairaPalette.accent)
             Text("Your Awaira trial has ended")
-                .font(.title2.weight(.bold))
+                .awairaDisplay(24)
+                .foregroundStyle(AwairaPalette.text)
                 .multilineTextAlignment(.center)
             Text("Thanks for giving Awaira a try. Visit awaira.app on your computer to continue with Awaira.")
-                .font(.body)
-                .foregroundStyle(.secondary)
+                .awairaSubtitle()
+                .foregroundStyle(AwairaPalette.ink.opacity(0.55))
                 .multilineTextAlignment(.center)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(AwairaPalette.window.ignoresSafeArea())
     }
 }

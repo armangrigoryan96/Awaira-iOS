@@ -1,42 +1,48 @@
 import SwiftUI
 
 enum MobileAppTab: Hashable, CaseIterable {
-    case today, patterns, reflect, settings
+    case today, patterns, learn, journal
 
     var title: String {
         switch self {
         case .today:    return "Today"
         case .patterns: return "Patterns"
-        case .reflect:  return "Reflect"
-        case .settings: return "Settings"
+        case .learn:    return "Learn"
+        case .journal:  return "Journal"
         }
     }
 
-    /// The mockup's own glyphs — a house, a bar chart, a leaf and a gear. The Mac rail's drawn icons
-    /// (a trend line, a card, sliders) are a different set; the phone follows its own design.
-    var symbol: String {
+    /// Filled while selected, outlined otherwise — the one weight change that says "you are here"
+    /// without needing a second colour to say it. `square.and.pencil` has no filled twin, so
+    /// Journal leans on the plate and the accent alone.
+    func symbol(selected: Bool) -> String {
         switch self {
-        case .today:    return "house"
-        case .patterns: return "chart.bar"
-        case .reflect:  return "leaf"
-        case .settings: return "gearshape"
+        case .today:    return selected ? "house.fill" : "house"
+        case .patterns: return selected ? "chart.bar.fill" : "chart.bar"
+        case .learn:    return selected ? "book.fill" : "book"
+        case .journal:  return "square.and.pencil"
         }
     }
 }
 
-/// The design's own tab bar rather than `TabView`'s: the selected item sits on a solid blue plate,
-/// which `tabItem` cannot draw, and the bar is the one surface deeper than the page.
+/// The design's own tab bar rather than `TabView`'s, because `tabItem` cannot draw the selected
+/// state the design asks for.
+///
+/// The bar is the *raised* surface above the page, as the Mac's navigation rail is above the
+/// workspace, and the selected item is an opening cut through it into the page's own colour. That
+/// is the desktop's metaphor exactly.
 struct MobileTabBar: View {
     @Binding var selection: MobileAppTab
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             ForEach(MobileAppTab.allCases, id: \.self) { tab in
                 item(tab)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 6)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
         .background(alignment: .top) {
             AwairaPalette.sidebar
                 .overlay(alignment: .top) {
@@ -46,29 +52,45 @@ struct MobileTabBar: View {
                 }
                 .ignoresSafeArea(edges: .bottom)
         }
+        .animation(.easeInOut(duration: 0.16), value: selection)
     }
 
     private func item(_ tab: MobileAppTab) -> some View {
         let isSelected = selection == tab
         return Button {
+            guard !isSelected else { return }
             selection = tab
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 19, weight: .regular))
-                    .foregroundStyle(isSelected ? AwairaPalette.navSelectedText
-                                                : AwairaPalette.ink.opacity(0.6))
-                    .frame(width: 52, height: 32)
-                    .background(isSelected ? AwairaPalette.navSelected : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(spacing: 4) {
+                Image(systemName: tab.symbol(selected: isSelected))
+                    .scaledFont(18, weight: .regular)
+                    .foregroundStyle(isSelected ? AwairaPalette.accent : AwairaPalette.ink.opacity(0.55))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
                 Text(tab.title)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? AwairaPalette.text : AwairaPalette.ink.opacity(0.6))
+                    .scaledFont(11, weight: isSelected ? .semibold : .regular)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(isSelected ? AwairaPalette.navSelectedText
+                                                : AwairaPalette.ink.opacity(0.55))
             }
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity)
+            // The cut-out: the selected destination opens into the same canvas as the page above
+            // it, outlined by the hairline every other surface in the app is outlined by.
+            .background {
+                RoundedRectangle(cornerRadius: AwairaPalette.cardRadius, style: .continuous)
+                    .fill(AwairaPalette.navSelected)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AwairaPalette.cardRadius, style: .continuous)
+                            .strokeBorder(AwairaPalette.cardBorder, lineWidth: 1)
+                    )
+                    .opacity(isSelected ? 1 : 0)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tab.\(tab.title)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

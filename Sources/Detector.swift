@@ -28,6 +28,7 @@ final class Detector: NSObject, ObservableObject {
     @Published private(set) var actualPulls = 0
     @Published private(set) var activeSecondsToday = 0.0
     @Published private(set) var week: [MobileStatsStore.DayBar] = []
+    @Published private(set) var history: [MobileStatsStore.DayBar] = []
     /// Today hour by hour, and the same for every day in `week` keyed by its id — what the Today
     /// heatmap draws for whichever day the week strip has selected.
     @Published private(set) var chartDay: [MobileStatsStore.DayBar] = []
@@ -39,6 +40,7 @@ final class Detector: NSObject, ObservableObject {
     /// Today's completed touches per head zone, keyed by `ZoneHit.name` — what the Today page's
     /// head draws a number over.
     @Published private(set) var zoneCounts: [String: Int] = [:]
+    @Published private(set) var zonesByDay: [String: [String: Int]] = [:]
     @Published private(set) var lastDetection: Date?
     @Published var fps = 0.0
     @Published var hasFace = false
@@ -459,6 +461,7 @@ final class Detector: NSObject, ObservableObject {
         actualPulls = snapshot.today.pulls
         activeSecondsToday = snapshot.today.activeSeconds
         week = snapshot.week
+        history = snapshot.history
         chartDay = snapshot.todayHours
         hoursByDay = snapshot.hoursByDay
         hourOfWeek = snapshot.hourOfWeek
@@ -466,6 +469,7 @@ final class Detector: NSObject, ObservableObject {
         weeklyRate = snapshot.weeklyRate
         weeklyImprovement = snapshot.weeklyImprovement
         zoneCounts = snapshot.todayZones
+        zonesByDay = snapshot.zonesByDay
         lastDetection = snapshot.lastDetection
     }
 }

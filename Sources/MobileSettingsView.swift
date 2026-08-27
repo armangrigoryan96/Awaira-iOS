@@ -25,8 +25,9 @@ enum MobileAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Settings, now a tab of its own rather than a sheet over Today. Still a native `Form`: the
-/// redesign covers the dashboard, and repainting the controls is a separate piece of work.
+/// Settings. A native `Form` — its grouping and its controls are the right ones on a phone — but
+/// dressed in the app's own surfaces rather than iOS's grouped grey: the page colour behind it, the
+/// card colour under each section, and the palette's hairline between rows.
 struct MobileSettingsView: View {
     @ObservedObject var detector: Detector
     @ObservedObject var settings: AppSettings
@@ -35,7 +36,8 @@ struct MobileSettingsView: View {
     @Binding var voiceEnabled: Bool
     @Binding var blurEnabled: Bool
 
-    @AppStorage("mobileAppearance") private var appearance = MobileAppearance.system.rawValue
+    @AppStorage("mobileAppearance") private var appearance = MobileAppearance.dark.rawValue
+    @Environment(\.dismiss) private var dismiss
 
     /// What the theme row shows on its right-hand side, falling back to System for a value the app
     /// no longer recognises.
@@ -46,6 +48,13 @@ struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    MobilePageTitle(title: "Settings")
+                        .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+
                 Section {
                     // A `Menu` wrapping the picker rather than `.pickerStyle(.menu)` on it: the
                     // menu style stamps a ⌃⌄ glyph beside the value that cannot be turned off, and
@@ -74,8 +83,9 @@ struct MobileSettingsView: View {
                 } header: {
                     Text("Appearance")
                 } footer: {
-                    Text("Dark keeps the dashboard on the design's navy; System follows iOS.")
+                    Text("Dark keeps the dashboard on the design's near-black page; System follows iOS.")
                 }
+                .listRowBackground(AwairaPalette.statsSurface)
 
                 Section {
                     Toggle("Vibrate", isOn: $vibrateEnabled)
@@ -89,6 +99,7 @@ struct MobileSettingsView: View {
                 } footer: {
                     Text("Choose the cues that feel helpful. You can change them at any time.")
                 }
+                .listRowBackground(AwairaPalette.statsSurface)
 
                 Section("Timing") {
                     VStack(alignment: .leading, spacing: 6) {
@@ -106,6 +117,7 @@ struct MobileSettingsView: View {
                             .accessibilityIdentifier("buzzDelaySlider")
                     }
                 }
+                .listRowBackground(AwairaPalette.statsSurface)
 
                 licenceSection
 
@@ -115,10 +127,23 @@ struct MobileSettingsView: View {
                         UserDefaults.standard.set(0, forKey: "awairaOnboardingVersion")
                     }
                 }
+                .listRowBackground(AwairaPalette.statsSurface)
             }
-            .navigationTitle("Settings")
+            .scrollContentBackground(.hidden)
+            .background(AwairaPalette.window.ignoresSafeArea())
+            .listSectionSpacing(.compact)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AwairaPalette.window, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AwairaPalette.accent)
+                }
+            }
         }
         .tint(AwairaPalette.accent)
+        .presentationBackground(AwairaPalette.window)
     }
 
     @ViewBuilder private var licenceSection: some View {
@@ -138,6 +163,7 @@ struct MobileSettingsView: View {
         } footer: {
             Text("A licence can be active on one device at a time.")
         }
+        .listRowBackground(AwairaPalette.statsSurface)
     }
 
     private var thicknessValueLabel: String {

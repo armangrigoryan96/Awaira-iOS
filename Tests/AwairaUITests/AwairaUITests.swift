@@ -22,12 +22,11 @@ final class AwairaUITests: XCTestCase {
 
     func testLaunchesAndShowsTheCounter() {
         let app = launchApp()
-        // "TOTAL APPROACHES" on the Today screen — the count alone now, with its label beside it.
+        // The Today awareness figure remains present before the detector has collected a baseline.
         let counter = app.staticTexts["todayCount"]
         XCTAssertTrue(counter.waitForExistence(timeout: 10))
-        XCTAssertEqual(counter.label, "0")
-        // The camera lives in the header pill, and the simulator never starts it.
-        XCTAssertEqual(app.staticTexts["statusLine"].label, "Camera off")
+        XCTAssertEqual(counter.label, "—")
+        XCTAssertTrue(app.buttons["settingsToggle"].exists)
     }
 
     func testSurvivesBackgrounding() {

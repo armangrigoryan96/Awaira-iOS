@@ -3,33 +3,48 @@ import WebKit
 
 /// A native index plus the full published Awaira articles in an in-app reader. WebKit keeps its
 /// normal cache, and completion is stored locally on the phone so it is never part of analytics.
+/// The Learn tab: the published Awaira articles, grouped by the behaviour they cover, opened in an
+/// in-app reader.
+///
+/// This was a stock `List` tinted `.mint` — a colour that exists nowhere else in the app — on iOS's
+/// own grouped background rather than the design's page. It is now built from the same page frame
+/// and the same cards as every other tab.
 struct MobileLearnLibrary: View {
     @State private var completed = MobileLearnReadStore.load()
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Text("Practical, evidence-informed reading on BFRBs and the patterns around them. Articles are grouped by the behavior you want to understand.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
-                }
+            MobilePage(title: "Learn",
+                       subtitle: "Practical, evidence-informed reading on BFRBs and the patterns "
+                               + "around them.",
+                       accessory: AnyView(MobileBrandRow())) {
+                progressCard
+
                 ForEach(MobileLearnTopic.allCases) { topic in
                     let articles = MobileLearnArticle.all.filter { $0.topic == topic }
                     if !articles.isEmpty {
-                        Section(topic.rawValue) {
-                            ForEach(articles) { article in
-                                NavigationLink(value: article) {
-                                    articleRow(article)
+                        VStack(alignment: .leading, spacing: 8) {
+                            MobileEyebrow(text: topic.rawValue.uppercased())
+                            VStack(spacing: 0) {
+                                ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                                    NavigationLink(value: article) {
+                                        articleRow(article)
+                                    }
+                                    .buttonStyle(.plain)
+                                    if index < articles.count - 1 {
+                                        Rectangle()
+                                            .fill(AwairaPalette.cardBorder)
+                                            .frame(height: 1)
+                                            .padding(.leading, 44)
+                                    }
                                 }
                             }
+                            .awairaCard(padding: 0)
                         }
+                        .padding(.top, 2)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Learn")
             .navigationDestination(for: MobileLearnArticle.self) { article in
                 MobileArticleReader(article: article, isComplete: completed.contains(article.id)) {
                     completed.insert(article.id)
@@ -37,27 +52,66 @@ struct MobileLearnLibrary: View {
                 }
             }
         }
-        .tint(.mint)
+        .tint(AwairaPalette.accent)
+    }
+
+    /// How far through the library the reader is — the one number that makes a list of thirteen
+    /// articles feel like a course rather than a menu.
+    private var progressCard: some View {
+        let total = MobileLearnArticle.all.count
+        let done = completed.count
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                MobileEyebrow(text: "YOUR READING")
+                Spacer(minLength: 0)
+                Text("\(done) of \(total)")
+                    .awairaStat(13)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.65))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AwairaPalette.ink.opacity(0.08))
+                    Capsule()
+                        .fill(AwairaPalette.accent)
+                        .frame(width: total > 0 ? geo.size.width * CGFloat(done) / CGFloat(total) : 0)
+                }
+            }
+            .frame(height: 5)
+        }
+        .awairaCard()
     }
 
     private func articleRow(_ article: MobileLearnArticle) -> some View {
         let isComplete = completed.contains(article.id)
-        return HStack(alignment: .top, spacing: 10) {
+        return HStack(alignment: .top, spacing: 11) {
             Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isComplete ? .mint : .secondary)
-                .font(.body)
-                .padding(.top, 2)
+                .scaledFont(16)
+                .foregroundStyle(isComplete ? AwairaPalette.accent : AwairaPalette.ink.opacity(0.3))
+                .padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
                 Text(article.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .scaledFont(15, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.text)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(isComplete ? "Read" : article.summary)
-                    .font(.caption)
-                    .foregroundStyle(isComplete ? .mint : .secondary)
+                    .scaledFont(12)
+                    .foregroundStyle(isComplete ? AwairaPalette.accent
+                                                : AwairaPalette.ink.opacity(0.55))
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 6)
+            Image(systemName: "chevron.right")
+                .scaledFont(11, weight: .semibold)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.28))
+                .padding(.top, 3)
         }
-        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 }
 
@@ -69,17 +123,24 @@ private struct MobileArticleReader: View {
     var body: some View {
         VStack(spacing: 0) {
             MobileArticleWebView(url: article.url, onReachedEnd: markComplete)
-            Button(action: markComplete) {
-                Label(isComplete ? "Read" : "Mark as read",
-                      systemImage: isComplete ? "checkmark.circle.fill" : "checkmark.circle")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
+            Group {
+                if isComplete {
+                    Button(action: markComplete) {
+                        Label("Read", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(AwairaSecondaryButton())
+                } else {
+                    Button(action: markComplete) {
+                        Label("Mark as read", systemImage: "checkmark.circle")
+                    }
+                    .buttonStyle(AwairaPrimaryButton())
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(isComplete ? .mint : .teal)
             .padding(14)
-            .background(.bar)
+            .background(AwairaPalette.sidebar)
+            .overlay(alignment: .top) {
+                Rectangle().fill(AwairaPalette.cardBorder).frame(height: 1)
+            }
         }
         .navigationTitle(article.shortTitle)
         .navigationBarTitleDisplayMode(.inline)
