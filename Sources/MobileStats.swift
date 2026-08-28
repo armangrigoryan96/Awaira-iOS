@@ -79,6 +79,45 @@ final class MobileStatsStore {
         pruneHistory()
     }
 
+    /// Populates only the in-memory store used by App Store screenshot automation. This is never
+    /// called during a normal launch, is never persisted, and cannot appear in a user's history.
+    func loadScreenshotDemo(at now: Date = Date()) {
+        let calendar = Calendar.current
+        let recent = [24, 27, 22, 30, 25, 20, 31]
+        let earlier = [36, 34, 33, 35, 31, 37, 34]
+        let totals = earlier + recent
+        let hours = [8, 10, 13, 15, 18, 21]
+        var demo: [String: Day] = [:]
+
+        for (index, total) in totals.enumerated() {
+            guard let date = calendar.date(byAdding: .day, value: index - (totals.count - 1), to: now) else { continue }
+            var interruptions = Array(repeating: 0, count: 24)
+            var pulls = Array(repeating: 0, count: 24)
+            for (hourIndex, hour) in hours.enumerated() {
+                let value = total / hours.count + (hourIndex < total % hours.count ? 1 : 0)
+                interruptions[hour] = value
+                pulls[hour] = hourIndex.isMultiple(of: 2) ? max(1, value / 3) : max(0, value / 4)
+            }
+            let totalPulls = pulls.reduce(0, +)
+            var day = Day()
+            day.interruptions = total
+            day.prevented = max(0, total - totalPulls)
+            day.pulls = totalPulls
+            day.activeSeconds = 6 * 60 * 60
+            day.hourlyInterruptions = interruptions
+            day.hourlyPulls = pulls
+            day.lastDetection = date.addingTimeInterval(20 * 60 * 60).timeIntervalSince1970
+            if index == totals.count - 1 {
+                day.zoneCounts = [
+                    "cheek-left": 8, "cheek-right": 10, "chin": 5,
+                    "mouth": 4, "forehead": 2, "nose": 2
+                ]
+            }
+            demo[key(for: date)] = day
+        }
+        days = demo
+    }
+
     func addActive(seconds: TimeInterval, at date: Date) {
         guard seconds.isFinite, seconds > 0 else { return }
         mutateDay(for: date) { $0.activeSeconds += min(seconds, 1) }

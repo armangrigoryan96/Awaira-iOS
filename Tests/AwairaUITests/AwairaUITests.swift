@@ -22,11 +22,17 @@ final class AwairaUITests: XCTestCase {
 
     func testLaunchesAndShowsTheCounter() {
         let app = launchApp()
-        // The Today awareness figure remains present before the detector has collected a baseline.
+        // "approaches today" on the Today card — the count alone, with its label beside it. A
+        // count with nothing recorded is 0; the em-dash belongs to the per-hour rate above it,
+        // which has no meaning until a minute has been tracked.
         let counter = app.staticTexts["todayCount"]
         XCTAssertTrue(counter.waitForExistence(timeout: 10))
-        XCTAssertEqual(counter.label, "—")
+        XCTAssertEqual(counter.label, "0")
         XCTAssertTrue(app.buttons["settingsToggle"].exists)
+        // The camera lives in the header pill, and the simulator never starts it. The pill is a
+        // button, so its state reads off the control rather than off a child text: SwiftUI merges a
+        // button's children into one element, which is what VoiceOver should announce.
+        XCTAssertEqual(app.buttons["toggleCamera"].label, "Camera off")
     }
 
     func testSurvivesBackgrounding() {

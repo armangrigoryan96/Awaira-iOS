@@ -7,8 +7,6 @@ struct IPhoneOnboardingView: View {
     var onFinish: () -> Void
 
     @State private var index = 0
-    @State private var source = ""
-    @State private var otherSource = ""
     @State private var answers: [String: Set<String>] = [:]
     @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
     @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
@@ -64,7 +62,6 @@ struct IPhoneOnboardingView: View {
     @ViewBuilder private var stepContent: some View {
         switch step.kind {
         case .education(let page): educationPage(page)
-        case .acquisition: acquisitionPage
         case .question(let question): questionPage(question)
         case .nudge: nudgePage
         }
@@ -87,23 +84,6 @@ struct IPhoneOnboardingView: View {
             Spacer(minLength: 16)
         }
         .frame(maxWidth: .infinity, minHeight: 440)
-    }
-
-    private var acquisitionPage: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            stepTitle("How did you hear about us?", helper: "Choose one option — it helps us understand where people discover Awaira. Your answer stays private.")
-            optionGrid(options: ["YouTube", "TikTok", "Instagram", "Google Search", "Facebook", "Reddit", "Other"], selected: source, multiple: false) { choice in
-                source = choice
-            }
-            if source == "Other" {
-                TextField("Please specify", text: $otherSource)
-                    .textFieldStyle(.plain)
-                    .padding(14)
-                    .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
-            }
-        }
-        .padding(.top, 30)
     }
 
     private func questionPage(_ question: OnboardingQuestion) -> some View {
@@ -191,23 +171,6 @@ struct IPhoneOnboardingView: View {
         }
     }
 
-    private func optionGrid(options: [String], selected: String, multiple: Bool, select: @escaping (String) -> Void) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            ForEach(options, id: \.self) { option in
-                Button { select(option) } label: {
-                    Text(option)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .padding(.horizontal, 10)
-                        .background(selected == option ? step.accent.opacity(0.12) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay { RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(selected == option ? step.accent.opacity(0.7) : Color(uiColor: .separator), lineWidth: 1) }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
     private func nudgeRow(symbol: String, title: String, detail: String, color: Color) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol)
@@ -262,7 +225,6 @@ struct IPhoneOnboardingView: View {
 
     private var canAdvance: Bool {
         switch step.kind {
-        case .acquisition: return !source.isEmpty && (source != "Other" || !otherSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         case .question(let question): return !(answers[question.key, default: []].isEmpty)
         case .education, .nudge: return true
         }
@@ -273,22 +235,10 @@ struct IPhoneOnboardingView: View {
         else { withAnimation(.easeInOut(duration: 0.22)) { index += 1 } }
     }
 
-    /// The wire ids the backend stores, keyed by the label shown on screen.
-    private static let sourceIDs = ["YouTube": "youtube", "TikTok": "tiktok", "Instagram": "instagram",
-                                    "Google Search": "google_search", "Facebook": "facebook",
-                                    "Reddit": "reddit", "Other": "other"]
-
     /// Puts the stored answers back on screen. Anything not recognised (an option that has since
     /// been renamed) is dropped rather than shown as a selection the list cannot display.
     private func restoreSavedAnswers() {
         let defaults = UserDefaults.standard
-        let labels = Dictionary(uniqueKeysWithValues: Self.sourceIDs.map { ($0.value, $0.key) })
-        if source.isEmpty,
-           let storedID = defaults.string(forKey: MobileAcquisitionReporter.sourceKey),
-           let label = labels[storedID] {
-            source = label
-            otherSource = defaults.string(forKey: MobileAcquisitionReporter.otherKey) ?? ""
-        }
         for step in onboardingSteps {
             guard case .question(let question) = step.kind, answers[question.key] == nil else { continue }
             let stored = (defaults.string(forKey: question.key) ?? "")
@@ -301,22 +251,7 @@ struct IPhoneOnboardingView: View {
 
     private func finish() {
         let defaults = UserDefaults.standard
-        let newSource = Self.sourceIDs[source] ?? "other"
-        let newOther = (source == "Other" ? otherSource : "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let previousSource = defaults.string(forKey: MobileAcquisitionReporter.sourceKey) ?? ""
-        let previousOther = (defaults.string(forKey: MobileAcquisitionReporter.otherKey) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        defaults.set(newSource, forKey: MobileAcquisitionReporter.sourceKey)
-        defaults.set(newOther, forKey: MobileAcquisitionReporter.otherKey)
-        // Only a changed answer needs sending again — and it goes out under the same response id,
-        // so the backend updates that row instead of storing a second one.
-        if newSource != previousSource || newOther != previousOther {
-            defaults.set(false, forKey: MobileAcquisitionReporter.submittedKey)
-        }
         for (key, values) in answers { defaults.set(values.sorted().joined(separator: ","), forKey: key) }
-        Task { await MobileAcquisitionReporter.submitIfNeeded() }
         onFinish()
     }
 }
@@ -355,7 +290,7 @@ private struct MobileOnboardingIllustration: View {
 }
 
 private struct OnboardingStep {
-    enum Kind { case acquisition, education(EducationPage), question(OnboardingQuestion), nudge }
+    enum Kind { case education(EducationPage), question(OnboardingQuestion), nudge }
     let kind: Kind
     let accent: Color
     let cta: String
@@ -395,8 +330,7 @@ private let onboardingSteps: [OnboardingStep] = {
         .init(key: "lifeImpact", title: "How much does this affect your life?", helper: "", footer: "Most people are surprised by how often these habits happen once they become visible. That's exactly what Awaira is here to help with.", options: ["Rarely bothers me", "Sometimes affects me", "Often affects me", "Has a major impact"], multiple: false, accent: .green),
         .init(key: "goal", title: "What would you like to achieve?", helper: "", footer: nil, options: ["Pull less often", "Become more aware", "Stop completely", "Reduce stress"], multiple: false, accent: .purple)
     ]
-    return [.init(kind: .acquisition, accent: .indigo, cta: "Continue")]
-        + pages.map { .init(kind: .education($0), accent: $0.accent, cta: $0.title == "You're not doing it on purpose." ? "Yep, that's me" : "Continue") }
+    return pages.map { .init(kind: .education($0), accent: $0.accent, cta: $0.title == "You're not doing it on purpose." ? "Yep, that's me" : "Continue") }
         + questions.map { .init(kind: .question($0), accent: $0.accent, cta: "Continue") }
         + [.init(kind: .nudge, accent: .purple, cta: "Continue")]
 }()

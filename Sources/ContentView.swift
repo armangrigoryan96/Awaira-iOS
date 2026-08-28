@@ -9,7 +9,6 @@ struct ContentView: View {
     @StateObject private var detector = Detector()
     @StateObject private var settings = AppSettings()
     @StateObject private var journal = JournalStore()
-    @EnvironmentObject private var license: MobileLicenseManager
     /// Detection is the app's primary job, so a completed onboarding starts it immediately.
     /// The header control remains a pause/resume switch for the rare times someone wants it off.
     @State private var cameraRequested = !ProcessInfo.processInfo.arguments.contains("-UITest")
@@ -40,20 +39,12 @@ struct ContentView: View {
                         .padding(.bottom, 14)
                 }
 
-            // The source view is present only to support the system PiP window. It never exposes
-            // a camera frame in Awaira's interface.
-            CameraDisplayView(display: detector.display, showsVideo: false)
-                .ignoresSafeArea()
-                .opacity(0.001)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-
             DimOverlay(active: blurEnabled && detector.touchLevel >= 3)
             TouchBorder(level: detector.touchLevel)
         }
         .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
         .sheet(isPresented: $showingSettings) {
-            MobileSettingsView(detector: detector, settings: settings, license: license,
+            MobileSettingsView(detector: detector, settings: settings,
                                vibrateEnabled: $vibrateEnabled, voiceEnabled: $voiceEnabled,
                                blurEnabled: $blurEnabled)
         }

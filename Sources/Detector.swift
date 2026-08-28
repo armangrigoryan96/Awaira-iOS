@@ -20,8 +20,7 @@ final class Detector: NSObject, ObservableObject {
     @Published var zone: [Double]?            // normalized head zone [x0,y0,x1,y1], display space
     @Published var hands: [[CGPoint]] = []    // normalized hand points, display space
     @Published var touching = false
-    /// 0 = away, 1 = touching (red frame; PiP window darkens), 2 = lingering,
-    /// 3 = sustained (blur when the app is open, a buzz when it's in PiP).
+    /// 0 = away, 1 = touching, 2 = lingering, 3 = sustained.
     @Published var touchLevel = 0
     @Published var count = 0                  // today's detections
     @Published private(set) var preventedPulls = 0
@@ -46,33 +45,12 @@ final class Detector: NSObject, ObservableObject {
     @Published var hasFace = false
     @Published var connected = false          // camera running and delivering frames
     /// The same flag as `isPaused`, published for the UI: the header's camera switch reads it, and
-    /// it is the user's own intent, not the session's state — a stashed PiP window or a phone call
-    /// stops capture without ever touching this.
+    /// it is the user's own intent, not the session's state — a phone call can stop capture without
+    /// ever touching this.
     @Published private(set) var paused = false
-    /// True while the PiP window sits stashed in the screen edge. iOS forbids capture when nothing
-    /// of the app is on screen, so detection is paused for as long as this is true — the app tries
-    /// to pull the window back out, see `CameraDisplay.evaluateSuspension()`.
-    @Published private(set) var stashed = false
-    /// The size the floating window actually got, once it has been up. We only ask AVKit for a
-    /// ratio, so this is the only place the real height shows — the HUD prints it, since logs off
-    /// the device need root. Nil until the app has been minimized at least once, and kept afterwards.
-    @Published private(set) var pipWindowSize: CGSize?
-    /// How many times the window has gone into the screen edge, and how many of those it came back
-    /// from. Shown in the HUD because these two numbers are the only way to tell the three cases
-    /// apart from outside: never noticed (0 seen), noticed but stuck (seen > back), or working
-    /// (seen == back). Logs off the device need root, so this is the instrument.
-    @Published private(set) var stashSeen = 0
-    @Published private(set) var stashRecovered = 0
     @Published var errorText: String?
     /// Width / height of the camera buffer, so the overlay can undo the preview's aspect fill.
     @Published var bufferAspect: CGFloat = 3.0 / 4.0
-    /// How thick the floating thread is — the only sizing choice the app exposes.
-    @Published var pipThickness = PipWindow.savedThickness {
-        didSet {
-            let thickness = pipThickness
-            Task { @MainActor in self.display.windowThickness = thickness }
-        }
-    }
 
     // MARK: Live-tunable settings (read on the capture queue, written from the UI)
     var level2After: TimeInterval {
@@ -107,13 +85,6 @@ final class Detector: NSObject, ObservableObject {
     private var voiceEnabledFlag = false
     private var pausedFlag = false
     private var backgrounded = false
-    /// True once the session is allowed to keep capturing while the app is off-screen — i.e. in
-    /// Picture-in-Picture. Without it, backgrounding must stop the camera.
-    private var multitaskingAllowed = false
-
-    /// Where frames are drawn, and what carries them into the PiP window.
-    let display: CameraDisplay
-
     // MARK: Capture + Vision (configured/used only on captureQueue)
     let session = AVCaptureSession()
     private let output = AVCaptureVideoDataOutput()
@@ -164,19 +135,14 @@ final class Detector: NSObject, ObservableObject {
         return r
     }()
 
-    /// Main-actor because it builds the display layer; the detector is created from the UI.
+    /// The detector is created from the UI and observes the app lifecycle there.
     @MainActor override init() {
-        display = CameraDisplay()
         super.init()
+        if ProcessInfo.processInfo.arguments.contains("-ScreenshotDemo") {
+            stats.loadScreenshotDemo()
+        }
         applyStats(stats.snapshot())
         updateQualityForThermalState()
-        // Swiping the floating window into the screen edge takes the app off screen entirely, which
-        // iOS answers by cutting the camera. The window is pulled back out for us; this is where we
-        // pick the capture session back up once it is.
-        display.onStashChange = { [weak self] stashed in self?.stashChanged(to: stashed) }
-        display.onWindowSizeChange = { [weak self] size in
-            self?.onMain { self?.pipWindowSize = size }
-        }
         let nc = NotificationCenter.default
         nc.addObserver(self, selector: #selector(thermalStateChanged),
                        name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
@@ -308,13 +274,6 @@ final class Detector: NSObject, ObservableObject {
                 connection.isVideoMirrored = false
             }
         }
-        // Keep capturing while the app is a floating PiP window. This is the one path iOS 18+
-        // allows a camera to survive the user leaving the app, and it depends on the `voip`
-        // background mode declared in project.yml.
-        if session.isMultitaskingCameraAccessSupported {
-            session.isMultitaskingCameraAccessEnabled = true
-            lock.withLock { multitaskingAllowed = true }
-        }
         session.commitConfiguration()
         // Cap the hardware frame rate now that the format is locked in, so CoreMedia only wakes
         // up at our detection rate instead of 30fps — the dominant energy cost.
@@ -359,9 +318,6 @@ final class Detector: NSObject, ObservableObject {
 
     @objc private func appDidEnterBackground() {
         guard started else { return }
-        // In PiP the app is off-screen but still capturing — that's the whole point, so keep
-        // detecting and leave `backgrounded` false so `process()` isn't gated off.
-        if lock.withLock({ multitaskingAllowed }) { return }
         let didSuspend = lock.withLock { () -> Bool in
             guard !backgrounded else { return false }
             backgrounded = true
@@ -386,11 +342,7 @@ final class Detector: NSObject, ObservableObject {
         captureQueue.async { [weak self] in self?.session.startRunning() }
     }
 
-    /// A stashed PiP window arrives here as reason 1, `videoDeviceNotAvailableInBackground` — the
-    /// one interruption `isMultitaskingCameraAccessEnabled` does *not* shield us from, because it
-    /// isn't about sharing the camera, it's about the app having no pixels on screen. Not an error
-    /// to show the user: iOS preserves the `startRunning` request, and the window is on its way
-    /// back out of the edge anyway.
+    /// Calls, system camera contention, and similar interruptions reset the live detection state.
     @objc private func sessionWasInterrupted(_ note: Notification) {
         let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)
             .flatMap { AVCaptureSession.InterruptionReason(rawValue: $0.intValue) }
@@ -404,28 +356,9 @@ final class Detector: NSObject, ObservableObject {
         resumeCapture()
     }
 
-    /// The window went into the edge (or came back out of it).
-    private func stashChanged(to isStashed: Bool) {
-        onMain {
-            self.stashed = isStashed
-            if isStashed { self.stashSeen += 1 } else if self.stashSeen > 0 { self.stashRecovered += 1 }
-        }
-        if isStashed {
-            // Capture is already gone or about to be; drop the stale detection state so a hand held
-            // through the gap can't be read as one long touch, and clear the last frame's counters.
-            captureQueue.async { [weak self] in self?.core.reset() }
-            clearLiveState()
-        } else {
-            resumeCapture()
-        }
-    }
-
-    /// Bring capture back after a stash or an interruption. Idempotent, and reached from both the
-    /// un-stash callback and `AVCaptureSessionInterruptionEnded` — whichever lands first — because
-    /// waiting only on the notification can leave the window live with a dead camera.
+    /// Bring capture back after a foreground return or interruption.
     private func resumeCapture() {
         guard started, !lock.withLock({ pausedFlag || backgrounded }) else { return }
-        display.flushRenderer()
         captureQueue.async { [weak self] in
             guard let self else { return }
             self.core.reset()
@@ -482,11 +415,6 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
                        from connection: AVCaptureConnection) {
         autoreleasepool {   // keep the per-frame CoreVideo allocations from piling up
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-            // Draw on every frame that arrives, so the preview stays as current as the camera allows
-            // even when detection is throttled below it. Minimized nothing is drawn at all: the
-            // floating window exists only to keep some of the app on screen so iOS permits the
-            // camera, and it draws itself — see `PipWindowController`.
-            if !display.isInPictureInPicture { display.enqueue(sampleBuffer) }
             // Throttle to the adaptive target rate — drop frames that arrive too soon.
             let now = CACurrentMediaTime()
             if now - lastProcessedTime < targetFrameInterval { return }
@@ -579,9 +507,6 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
             stats.recordZone(finished.name, at: wallClockNow)
         }
         lastLevel = out.level
-        // Minimized, the floating window is the only thing the app can show — so it carries the red
-        // frame's job: red on a touch, bright red once the hand has been there for the set delay.
-        display.showLevel(out.level)
         // The two non-visual cues for a lingering hand, each independent and off unless the user
         // switched it on. They keep going until the hand comes down. Blur is the third cue and is
         // handled in the view layer where the screen can actually be dimmed.

@@ -2,8 +2,6 @@ name: Awaira
 options:
   bundleIdPrefix: com.awaira
   deploymentTarget:
-    # iOS 18 is where AVCaptureSession.isMultitaskingCameraAccessSupported stopped needing a
-    # special entitlement — that's what lets detection keep running in Picture-in-Picture.
     iOS: "18.0"
   createIntermediateGroups: true
 
@@ -18,19 +16,14 @@ targets:
       properties:
         CFBundleName: Awaira
         CFBundleDisplayName: Awaira
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         # Detection geometry assumes a portrait, upright buffer — see Detector.configureAndRun().
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        # Picture-in-Picture is the only way iOS lets a camera keep running while the user is in
-        # another app: `audio` permits PiP at all, `voip` is what makes
-        # `isMultitaskingCameraAccessSupported` return true on iOS 18+.
-        UIBackgroundModes:
-          - audio
-          - voip
         NSCameraUsageDescription: "Awaira uses the camera to notice when your hand reaches your face. Video is processed entirely on-device and never leaves your iPhone."
     settings:
       base:
@@ -38,11 +31,12 @@ targets:
         # Sources/Assets.xcassets — the app icon, taken from the Mac app so the two look like one
         # product (../awaira/frontend/Sources/Assets.xcassets).
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "3"
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: S6HG6FS5JJ
         CODE_SIGN_STYLE: Automatic
 
   AwairaTests:

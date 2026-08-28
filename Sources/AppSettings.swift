@@ -3,11 +3,7 @@ import Foundation
 /// The timing the user gets to choose, remembered across launches.
 ///
 /// This is about how long the app waits before reacting, not about how it finds a touch — the
-/// detection geometry stays at the Mac's numbers, see `ParityTests`. The floating window's shape
-/// is the user's too, but it lives in `PipWindow` next to the rest of what that window knows.
-///
-/// Same reasoning as `PipWindow.savedOrientation`: a setting that reset itself on every launch
-/// would be worse than not offering the choice at all.
+/// detection geometry stays at the Mac's numbers, see `ParityTests`.
 ///
 /// The value is a computed property over a `@Published` box rather than a `@Published` property
 /// with a `didSet`. Clamping needs to write the property from inside its own observer, and on a
@@ -15,8 +11,7 @@ import Foundation
 /// stored property — it recurses until the stack runs out.
 final class AppSettings: ObservableObject {
 
-    /// Seconds a hand must stay on the face before the app reacts — the blur when it's open, the
-    /// buzz when it's minimized into the floating window. Fixed at three before this was a choice.
+    /// Seconds a hand must stay on the face before Awaira shows its selected in-app cues.
     var buzzAfter: TimeInterval {
         get { storedBuzzAfter }
         set {

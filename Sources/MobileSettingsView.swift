@@ -31,7 +31,6 @@ enum MobileAppearance: String, CaseIterable, Identifiable {
 struct MobileSettingsView: View {
     @ObservedObject var detector: Detector
     @ObservedObject var settings: AppSettings
-    @ObservedObject var license: MobileLicenseManager
     @Binding var vibrateEnabled: Bool
     @Binding var voiceEnabled: Bool
     @Binding var blurEnabled: Bool
@@ -103,13 +102,6 @@ struct MobileSettingsView: View {
 
                 Section("Timing") {
                     VStack(alignment: .leading, spacing: 6) {
-                        LabeledContent("Floating bar thickness", value: thicknessValueLabel)
-                        Slider(value: $detector.pipThickness,
-                               in: PipWindow.thicknessRange,
-                               step: PipWindow.thicknessStep)
-                            .accessibilityIdentifier("barThicknessSlider")
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
                         LabeledContent("Buzz after", value: String(format: "%.1f seconds", settings.buzzAfter))
                         Slider(value: $settings.buzzAfter,
                                in: AppSettings.buzzAfterRange,
@@ -118,8 +110,6 @@ struct MobileSettingsView: View {
                     }
                 }
                 .listRowBackground(AwairaPalette.statsSurface)
-
-                licenceSection
 
                 Section {
                     // The app watches this key, so clearing it drops straight back into onboarding.
@@ -146,34 +136,4 @@ struct MobileSettingsView: View {
         .presentationBackground(AwairaPalette.window)
     }
 
-    @ViewBuilder private var licenceSection: some View {
-        Section {
-            if case .valid(let plan, let expires) = license.state {
-                LabeledContent("Plan", value: plan.capitalized)
-                LabeledContent("Status", value: expiryText(expires, plan: plan))
-                Button("Refresh licence") { Task { await license.recheck() } }
-                    .disabled(license.checking)
-                Button("Remove licence", role: .destructive) { license.removeLicense() }
-            } else {
-                Text("No active licence on this iPhone.")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Licence")
-        } footer: {
-            Text("A licence can be active on one device at a time.")
-        }
-        .listRowBackground(AwairaPalette.statsSurface)
-    }
-
-    private var thicknessValueLabel: String {
-        let requested = String(format: "%.0f pt", detector.pipThickness)
-        guard let size = detector.pipWindowSize else { return requested }
-        return requested + String(format: " (%.0f pt shown)", min(size.width, size.height))
-    }
-
-    private func expiryText(_ expires: Date?, plan: String) -> String {
-        guard let expires, plan.lowercased() != "lifetime" else { return "Active" }
-        return "Renews \(expires.formatted(date: .abbreviated, time: .omitted))"
-    }
 }
