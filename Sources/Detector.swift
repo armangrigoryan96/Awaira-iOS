@@ -36,6 +36,9 @@ final class Detector: NSObject, ObservableObject {
     @Published private(set) var weeklyTotal = 0
     @Published private(set) var weeklyRate = 0.0
     @Published private(set) var weeklyImprovement: Double?
+    /// Earned mobile badges persist after their qualifying period passes, just like their desktop
+    /// counterparts. Only opaque badge IDs are stored.
+    @Published private(set) var unlockedAchievementIDs: Set<String> = []
     /// Today's completed touches per head zone, keyed by `ZoneHit.name` — what the Today page's
     /// head draws a number over.
     @Published private(set) var zoneCounts: [String: Int] = [:]
@@ -111,6 +114,7 @@ final class Detector: NSObject, ObservableObject {
     private var lastStatsPublish: CFTimeInterval = 0
     /// Aggregate-only, local history backing the mobile dashboard.
     private let stats = MobileStatsStore()
+    private let achievementDefaultsKey = "awaira.mobile.unlockedAchievements.v1"
     /// Names *where* on the head each finished touch landed. Like `stats`, it lives on the capture
     /// queue and is touched from nowhere else, so it needs no lock — unlike `core`, whose config the
     /// UI writes.
@@ -138,6 +142,7 @@ final class Detector: NSObject, ObservableObject {
     /// The detector is created from the UI and observes the app lifecycle there.
     @MainActor override init() {
         super.init()
+        unlockedAchievementIDs = Set(UserDefaults.standard.stringArray(forKey: achievementDefaultsKey) ?? [])
         if ProcessInfo.processInfo.arguments.contains("-ScreenshotDemo") {
             stats.loadScreenshotDemo()
         }
@@ -401,6 +406,13 @@ final class Detector: NSObject, ObservableObject {
         weeklyTotal = snapshot.weeklyTotal
         weeklyRate = snapshot.weeklyRate
         weeklyImprovement = snapshot.weeklyImprovement
+        let newlyEligible = MobileAchievementEvaluator.eligible(in: snapshot.history,
+                                                                 weeklyImprovement: snapshot.weeklyImprovement)
+        let mergedAchievements = unlockedAchievementIDs.union(newlyEligible)
+        if mergedAchievements != unlockedAchievementIDs {
+            unlockedAchievementIDs = mergedAchievements
+            UserDefaults.standard.set(Array(mergedAchievements).sorted(), forKey: achievementDefaultsKey)
+        }
         zoneCounts = snapshot.todayZones
         zonesByDay = snapshot.zonesByDay
         lastDetection = snapshot.lastDetection
@@ -493,7 +505,11 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         let wallClockNow = Date()
         if out.didStartTouch { stats.recordDetection(at: wallClockNow) }
-        if out.didEndTouch { stats.recordOutcome(sustained: out.touchWasPull, at: wallClockNow) }
+        if out.didEndTouch {
+            stats.recordOutcome(sustained: out.touchWasPull,
+                                at: wallClockNow,
+                                duration: out.touchDuration)
+        }
 
         // Zone labelling. Runs *after* the core has spoken and only reads its result — a touch is
         // counted, extended and ended exactly as it was before this existed. A touch the classifier

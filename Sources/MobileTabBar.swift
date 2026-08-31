@@ -1,12 +1,13 @@
 import SwiftUI
 
 enum MobileAppTab: Hashable, CaseIterable {
-    case today, patterns, learn, journal
+    case today, patterns, wins, learn, journal
 
     var title: String {
         switch self {
         case .today:    return "Today"
         case .patterns: return "Patterns"
+        case .wins:     return "Wins"
         case .learn:    return "Learn"
         case .journal:  return "Journal"
         }
@@ -19,6 +20,7 @@ enum MobileAppTab: Hashable, CaseIterable {
         switch self {
         case .today:    return selected ? "house.fill" : "house"
         case .patterns: return selected ? "chart.bar.fill" : "chart.bar"
+        case .wins:     return selected ? "medal.fill" : "medal"
         case .learn:    return selected ? "book.fill" : "book"
         case .journal:  return "square.and.pencil"
         }

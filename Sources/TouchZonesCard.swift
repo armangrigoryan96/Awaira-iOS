@@ -5,7 +5,8 @@ import SwiftUI
 /// Ported from `awaira/frontend/Sources/TouchZonesCard.swift`, artwork and anchors included.
 /// `counts` is today's tally from `Detector.zoneCounts`, so the map remains a today-only view.
 struct TouchZonesCard: View {
-    /// Per-zone totals for today, keyed the way the classifier names a zone ("cheek-right").
+    /// Per-zone totals for the day selected in the calendar, keyed the way the classifier names a
+    /// zone ("cheek-right").
     var counts: [String: Int] = [:]
 
     /// Where each zone's pill sits, in fractions of the head artwork (0,0 = its top-left corner).
@@ -52,7 +53,7 @@ struct TouchZonesCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     legend
                     if counts.isEmpty {
-                        Text("No touches recorded yet today.")
+                        Text("No touches recorded for this day.")
                             .font(.system(size: 12))
                             .foregroundStyle(AwairaPalette.soft)
                             .fixedSize(horizontal: false, vertical: true)

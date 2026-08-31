@@ -8,6 +8,10 @@ final class MobileStatsStore {
         var prevented = 0
         var pulls = 0
         var activeSeconds = 0.0
+        /// Aggregate seconds between a detected touch and release. This is never video or a
+        /// timestamp trail; it only makes the "Let go sooner" achievement measurable on-device.
+        /// Optional so history saved by an earlier version still decodes safely.
+        var totalTouchSeconds: Double?
         var hourlyInterruptions = Array(repeating: 0, count: 24)
         /// Sustained touches by hour — the heatmap's second row. Optional in the decoder so days
         /// stored before this existed still read back, as an empty day rather than a failure.
@@ -27,6 +31,7 @@ final class MobileStatsStore {
 
         /// The zone tally, empty rather than nil for a day stored before this existed.
         var zones: [String: Int] { zoneCounts ?? [:] }
+        var touchSeconds: Double { totalTouchSeconds ?? 0 }
     }
 
     struct DayBar: Identifiable {
@@ -36,6 +41,7 @@ final class MobileStatsStore {
         let prevented: Int
         let pulls: Int
         let activeSeconds: Double
+        let totalTouchSeconds: Double
     }
 
     struct Snapshot {
@@ -134,7 +140,7 @@ final class MobileStatsStore {
         save(force: true)
     }
 
-    func recordOutcome(sustained: Bool, at date: Date) {
+    func recordOutcome(sustained: Bool, at date: Date, duration: TimeInterval = 0) {
         mutateDay(for: date) {
             if sustained {
                 $0.pulls += 1
@@ -144,6 +150,9 @@ final class MobileStatsStore {
                 $0.hourlyPulls = hourly
             } else {
                 $0.prevented += 1
+            }
+            if duration.isFinite, duration > 0 {
+                $0.totalTouchSeconds = $0.touchSeconds + min(duration, 5 * 60)
             }
         }
         save(force: true)
@@ -172,7 +181,8 @@ final class MobileStatsStore {
             let day = days[id] ?? Day()
             return DayBar(id: id, date: date, interruptions: day.interruptions,
                           prevented: day.prevented, pulls: day.pulls,
-                          activeSeconds: day.activeSeconds)
+                          activeSeconds: day.activeSeconds,
+                          totalTouchSeconds: day.touchSeconds)
         }
         let week = Array(history.suffix(7))
         let weeklyTotal = week.reduce(0) { $0 + $1.interruptions }
@@ -233,7 +243,8 @@ final class MobileStatsStore {
                                          ? day.hourlyInterruptions[hour] : 0,
                           prevented: 0,
                           pulls: pulls.indices.contains(hour) ? pulls[hour] : 0,
-                          activeSeconds: 0)
+                          activeSeconds: 0,
+                          totalTouchSeconds: 0)
         }
     }
 

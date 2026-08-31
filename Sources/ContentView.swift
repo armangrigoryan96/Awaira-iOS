@@ -34,9 +34,8 @@ struct ContentView: View {
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AwairaPalette.window.ignoresSafeArea())
-                .overlay(alignment: .bottom) {
+                .safeAreaInset(edge: .bottom, spacing: 0) {
                     MobileTabBar(selection: $selectedTab)
-                        .padding(.bottom, 14)
                 }
 
             DimOverlay(active: blurEnabled && detector.touchLevel >= 3)
@@ -81,6 +80,9 @@ struct ContentView: View {
         case .patterns:
             MobileInsightsView(detector: detector, journal: journal,
                                onOpenSettings: { showingSettings = true })
+        case .wins:
+            MobileAchievementsView(detector: detector,
+                                   onOpenSettings: { showingSettings = true })
         case .learn:
             // The reflection surface itself is still to come; the library is the calmest thing to
             // put here in the meantime, and it keeps the tab from being a dead end.
