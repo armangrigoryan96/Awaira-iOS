@@ -162,13 +162,20 @@ private struct MobileBadgeDetail: View {
                 }
             }
             Divider().overlay(AwairaPalette.cardBorder)
-            Text("How to earn it")
-                .scaledFont(17, weight: .semibold)
-                .foregroundStyle(AwairaPalette.text)
-            Text(badge.requirement)
-                .scaledFont(16)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.76))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Label("REQUIREMENT", systemImage: "checkmark.seal")
+                    .awairaCaption(11)
+                    .foregroundStyle(badge.difficulty.color)
+                Text(badge.requirement)
+                    .scaledFont(16)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.80))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AwairaPalette.window, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(badge.difficulty.color.opacity(0.24), lineWidth: 1))
             Spacer()
             Button("Done") { dismiss() }
                 .buttonStyle(AwairaPrimaryButton())
