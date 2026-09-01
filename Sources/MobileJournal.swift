@@ -39,6 +39,11 @@ final class JournalStore: ObservableObject {
         persist()
     }
 
+    func deleteAll() {
+        entries = []
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
     private func persist() {
         UserDefaults.standard.set(try? JSONEncoder().encode(entries), forKey: key)
     }

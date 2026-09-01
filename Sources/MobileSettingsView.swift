@@ -31,12 +31,14 @@ enum MobileAppearance: String, CaseIterable, Identifiable {
 struct MobileSettingsView: View {
     @ObservedObject var detector: Detector
     @ObservedObject var settings: AppSettings
+    @ObservedObject var journal: JournalStore
     @Binding var vibrateEnabled: Bool
     @Binding var voiceEnabled: Bool
     @Binding var blurEnabled: Bool
 
     @AppStorage("mobileAppearance") private var appearance = MobileAppearance.dark.rawValue
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDataDeletion = false
 
     /// What the theme row shows on its right-hand side, falling back to System for a value the app
     /// no longer recognises.
@@ -118,6 +120,26 @@ struct MobileSettingsView: View {
                     }
                 }
                 .listRowBackground(AwairaPalette.statsSurface)
+
+                Section {
+                    Button("Delete all local data", systemImage: "trash", role: .destructive) {
+                        confirmingDataDeletion = true
+                    }
+                } header: {
+                    Text("Local data")
+                } footer: {
+                    Text("Erases this iPhone's saved history, journal, badges, learning progress, and settings. Camera frames are never stored.")
+                }
+                .listRowBackground(AwairaPalette.statsSurface)
+
+                Section("Privacy & legal") {
+                    Text("Camera frames, detections, and your journal stay on this iPhone. Opening Learn loads an Awaira article in the app; Awaira does not use advertising pixels on those pages.")
+                        .font(.footnote)
+                        .foregroundStyle(AwairaPalette.ink.opacity(0.68))
+                    Link("Privacy Policy", destination: MobileLegal.privacy)
+                    Link("Terms of Use", destination: MobileLegal.terms)
+                }
+                .listRowBackground(AwairaPalette.statsSurface)
             }
             .scrollContentBackground(.hidden)
             .background(AwairaPalette.window.ignoresSafeArea())
@@ -134,6 +156,25 @@ struct MobileSettingsView: View {
         }
         .tint(AwairaPalette.accent)
         .presentationBackground(AwairaPalette.window)
+        .alert("Delete all local data?", isPresented: $confirmingDataDeletion) {
+            Button("Delete", role: .destructive) { deleteLocalData() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes Awaira data stored on this iPhone. It cannot be undone.")
+        }
     }
 
+    private func deleteLocalData() {
+        detector.deleteLocalData()
+        journal.deleteAll()
+        if let bundleIdentifier = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
+        }
+    }
+
+}
+
+private enum MobileLegal {
+    static let privacy = URL(string: "https://awaira.app/privacy")!
+    static let terms = URL(string: "https://awaira.app/terms")!
 }

@@ -43,7 +43,7 @@ struct ContentView: View {
         }
         .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
         .sheet(isPresented: $showingSettings) {
-            MobileSettingsView(detector: detector, settings: settings,
+            MobileSettingsView(detector: detector, settings: settings, journal: journal,
                                vibrateEnabled: $vibrateEnabled, voiceEnabled: $voiceEnabled,
                                blurEnabled: $blurEnabled)
         }

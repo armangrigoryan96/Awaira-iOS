@@ -170,6 +170,14 @@ final class MobileStatsStore {
         save(force: true)
     }
 
+    /// Erases the aggregate on-device history. This is called only from the detector's serial
+    /// capture queue, keeping it safe from a frame being written at the same time.
+    func deleteAll() {
+        days = [:]
+        lastSave = .distantPast
+        defaults.removeObject(forKey: Self.storageKey)
+    }
+
     func snapshot(at now: Date = Date()) -> Snapshot {
         let calendar = Calendar.current
         let todayKey = key(for: now)

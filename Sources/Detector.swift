@@ -186,6 +186,25 @@ final class Detector: NSObject, ObservableObject {
         }
     }
 
+    /// Clears the local aggregate history and badge state without touching the live camera
+    /// session. Frames are never stored, but this gives people a direct way to erase the local
+    /// records created from detections.
+    func deleteLocalData() {
+        captureQueue.async { [weak self] in
+            guard let self else { return }
+            self.stats.deleteAll()
+            self.core.reset()
+            self.lastLevel = 0
+            self.todayKey = Self.isoDay(Date())
+            let snapshot = self.stats.snapshot()
+            self.onMain {
+                self.unlockedAchievementIDs = []
+                UserDefaults.standard.removeObject(forKey: self.achievementDefaultsKey)
+                self.applyStats(snapshot)
+            }
+        }
+    }
+
     /// Fully stop capture and clear live state.
     func stop() {
         guard started else { return }

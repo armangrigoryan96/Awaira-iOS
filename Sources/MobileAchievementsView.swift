@@ -61,10 +61,10 @@ struct MobileAchievementsView: View {
             .frame(width: 66, height: 66)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("This week’s momentum")
+                Text("This week’s local activity")
                     .scaledFont(16, weight: .semibold)
                     .foregroundStyle(AwairaPalette.text)
-                Text("Lower weekly rates, steady practice, and quick resets all count.")
+                Text("Your local activity, continued use, and movements that ended before the stronger cue all appear here.")
                     .awairaCaption(13)
                     .foregroundStyle(AwairaPalette.ink.opacity(0.62))
                     .fixedSize(horizontal: false, vertical: true)
@@ -292,16 +292,16 @@ private struct MobileAchievement: Identifiable {
 
     static let all: [MobileAchievement] = [
         .init(id: "first_awareness", title: "First touch noticed", requirement: "With monitoring on, let Awaira notice your hand reaching your face for the first time.", glyph: MobileBadgeIcon.eye, difficulty: .easy),
-        .init(id: "five_redirects", title: "Stopped yourself 5 times", requirement: "Move your hand away 5 times in one day, each time before Awaira’s stronger cue starts.", glyph: MobileBadgeIcon.uTurn, difficulty: .easy),
+        .init(id: "five_redirects", title: "5 early hand endings", requirement: "Have 5 hand movements end before Awaira’s stronger cue starts in one day.", glyph: MobileBadgeIcon.uTurn, difficulty: .easy),
         .init(id: "steady_practice", title: "Tracked 3 days in a row", requirement: "Track for at least 5 minutes a day, 3 days in a row.", glyph: MobileBadgeIcon.calendarCheck, difficulty: .easy),
         .init(id: "gentle_goal", title: "Met your daily goal", requirement: "Track for at least 1 hour today and finish the day at or below the hourly goal you set.", glyph: MobileBadgeIcon.target, difficulty: .easy),
         .init(id: "week_ahead", title: "5% better than last week", requirement: "Average at least 5% fewer touches per tracked hour over the last 7 days than in the 7 days before.", glyph: MobileBadgeIcon.trendUp, difficulty: .easy),
-        .init(id: "ten_redirects", title: "Stopped yourself 10 times", requirement: "Move your hand away 10 times in one day, each time before Awaira’s stronger cue starts.", glyph: MobileBadgeIcon.cycle, difficulty: .easy),
+        .init(id: "ten_redirects", title: "10 early hand endings", requirement: "Have 10 hand movements end before Awaira’s stronger cue starts in one day.", glyph: MobileBadgeIcon.cycle, difficulty: .easy),
         .init(id: "seven_day_routine", title: "Tracked 7 days in a row", requirement: "Track for at least 5 minutes a day, 7 days in a row.", glyph: MobileBadgeIcon.weekDial, difficulty: .easy),
         .init(id: "full_tracking_week", title: "An hour a day for a week", requirement: "Track for at least 1 hour a day, 7 days in a row.", glyph: MobileBadgeIcon.checkCircle, difficulty: .easy),
         .init(id: "seven_days_under_50", title: "A week under 50/hr", requirement: "Track for at least 1 hour a day, 7 days in a row, and stay under 50 touches per tracked hour every one of those days.", glyph: MobileBadgeIcon.sprout, difficulty: .easy),
         .init(id: "seven_days_under_40", title: "A week under 40/hr", requirement: "Track for at least 1 hour a day, 7 days in a row, and stay under 40 touches per tracked hour every one of those days.", glyph: MobileBadgeIcon.leaf, difficulty: .easy),
-        .init(id: "twenty_five_redirects", title: "Stopped yourself 25 times", requirement: "Move your hand away 25 times in one day, each time before Awaira’s stronger cue starts.", glyph: MobileBadgeIcon.compass, difficulty: .medium),
+        .init(id: "twenty_five_redirects", title: "25 early hand endings", requirement: "Have 25 hand movements end before Awaira’s stronger cue starts in one day.", glyph: MobileBadgeIcon.compass, difficulty: .medium),
         .init(id: "fourteen_day_routine", title: "Tracked 14 days in a row", requirement: "Track for at least 5 minutes a day, 14 days in a row.", glyph: MobileBadgeIcon.calendarTwoWeeks, difficulty: .medium),
         .init(id: "week_15_ahead", title: "15% better than last week", requirement: "Average at least 15% fewer touches per tracked hour over the last 7 days than in the 7 days before.", glyph: MobileBadgeIcon.bars, difficulty: .medium),
         .init(id: "quicker_release", title: "Let go 10% faster", requirement: "Make your average time from touch to letting go at least 10% shorter than it was in the 7 days before.", glyph: MobileBadgeIcon.bolt, difficulty: .medium),
