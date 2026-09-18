@@ -6,7 +6,9 @@ import SwiftUI
 /// The tab bar is drawn by `MobileTabBar` rather than by `TabView` — the design cuts the selected
 /// item out of the bar into the page's own colour, which `tabItem` cannot do.
 struct ContentView: View {
-    @StateObject private var detector = Detector()
+    /// Injected by `AwairaApp`, which owns it: onboarding's detection checks run on this same
+    /// detector, so the camera session it started is the one this screen carries on with.
+    @ObservedObject var detector: Detector
     @StateObject private var settings = AppSettings()
     @StateObject private var journal = JournalStore()
     /// Detection is the app's primary job, so a completed onboarding starts it immediately.

@@ -80,12 +80,23 @@ final class Detector: NSObject, ObservableObject {
         set { lock.withLock { voiceEnabledFlag = newValue } }
     }
 
+    /// Calibration mode — used by the onboarding detection check, where the person is asked to move
+    /// their hand to their face on purpose. Detection and everything it publishes (`zone`,
+    /// `touching`, `hasFace`, …) carry on as normal; only the *recording* and the cues stop, so a
+    /// rehearsal never lands in the day's history and the phone does not buzz at a movement the
+    /// screen just asked for.
+    var calibrating: Bool {
+        get { lock.withLock { calibratingFlag } }
+        set { lock.withLock { calibratingFlag = newValue } }
+    }
+
     /// The core is read on the capture queue and its config is written from the main thread, so
     /// unlike the rest of the detection state it does need the lock.
     private var core = DetectionCore()
     private let lock = NSLock()
     private var vibrateEnabledFlag = true
     private var voiceEnabledFlag = false
+    private var calibratingFlag = false
     private var pausedFlag = false
     private var backgrounded = false
     // MARK: Capture + Vision (configured/used only on captureQueue)
@@ -523,8 +534,11 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
             faceFrame = nil
         }
         let wallClockNow = Date()
-        if out.didStartTouch { stats.recordDetection(at: wallClockNow) }
-        if out.didEndTouch {
+        // Read once per frame: the onboarding check rehearses touches on request, and nothing it
+        // sees is recorded or reacted to.
+        let calibrating = lock.withLock { calibratingFlag }
+        if out.didStartTouch, !calibrating { stats.recordDetection(at: wallClockNow) }
+        if out.didEndTouch, !calibrating {
             stats.recordOutcome(sustained: out.touchWasPull,
                                 at: wallClockNow,
                                 duration: out.touchDuration)
@@ -538,14 +552,15 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         // publishes its zone.
         if let finished = zoneTracker.update(faceFrame: faceFrame, faceChecked: runFace,
                                              hands: handsNorm, zone: out.zone,
-                                             touching: out.touching, frameSize: frameSize) {
+                                             touching: out.touching, frameSize: frameSize),
+           !calibrating {
             stats.recordZone(finished.name, at: wallClockNow)
         }
         lastLevel = out.level
         // The two non-visual cues for a lingering hand, each independent and off unless the user
         // switched it on. They keep going until the hand comes down. Blur is the third cue and is
         // handled in the view layer where the screen can actually be dimmed.
-        if out.level >= 3 {
+        if out.level >= 3, !calibrating {
             if vibrateEnabled { Haptics.startSustained() } else { Haptics.stopSustained() }
             if voiceEnabled { CalmingTone.startSustained() } else { CalmingTone.stopSustained() }
         } else {
