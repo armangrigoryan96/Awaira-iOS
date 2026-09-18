@@ -20,7 +20,6 @@ struct ContentView: View {
     @State private var selectedContext: String?
     @State private var contextNote = ""
     @State private var addingNote = false
-    @State private var lastContextPrompt = Date.distantPast
 
     @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
     @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
@@ -60,11 +59,10 @@ struct ContentView: View {
         .onChange(of: detector.touchLevel) { _, level in
             if level == 1 {
                 TouchSound.play()
-                // Context is optional, so it cannot become another alert. A short cooldown lets a
-                // person stay in their day while still making the prompt available after a new run.
-                guard !showingContext, Date().timeIntervalSince(lastContextPrompt) >= 300 else { return }
+                // Each new face-touch run can be reflected on. A prompt already on screen remains
+                // in control until it is saved or skipped, so one touch never creates duplicates.
+                guard !showingContext else { return }
                 selectedContext = nil; contextNote = ""; addingNote = false; showingContext = true
-                lastContextPrompt = Date()
             }
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -138,10 +136,10 @@ struct ContentView: View {
     private var contextPrompt: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("What was happening?")
+                Text("What made you touch your face?")
                     .awairaDisplay(23)
                     .foregroundStyle(AwairaPalette.text)
-                Text("Optional. It stays on this iPhone.")
+                Text("Choose what was happening. It stays on this iPhone.")
                     .awairaCaption(14)
                     .foregroundStyle(AwairaPalette.ink.opacity(0.55))
             }

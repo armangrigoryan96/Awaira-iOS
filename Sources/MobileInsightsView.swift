@@ -12,12 +12,12 @@ struct MobileInsightsView: View {
     var body: some View {
         MobilePage(title: "Patterns",
                    subtitle: "Your week, brought into focus.",
+                   titleSize: 32,
                    accessory: AnyView(brandRow)) {
             MobileSegmented(options: PatternRange.allCases, selection: $range, label: \.title, compact: true)
             weeklyRhythmCard
-            strongestPatternCard
-            rhythmCard
-            reflectionsCard
+            patternAndReflectionsCard
+            dailyRhythmCard
         }
         .alert("Understanding a pattern", isPresented: $showingPatternHelp) {
             Button("Done", role: .cancel) { }
@@ -27,7 +27,16 @@ struct MobileInsightsView: View {
     }
 
     private var brandRow: some View {
-        MobileBrandRow {
+        HStack(spacing: 11) {
+            Image("logo")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
+            Text("Awaira")
+                .scaledFont(23, weight: .semibold)
+                .foregroundStyle(AwairaPalette.text)
+            Spacer(minLength: 8)
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
                     .scaledFont(21, weight: .medium)
@@ -44,136 +53,120 @@ struct MobileInsightsView: View {
     // MARK: - Weekly rhythm
 
     private var weeklyRhythmCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            MobileEyebrow(text: range == .seven ? "WEEKLY RHYTHM" : "YOUR RHYTHM")
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(range == .seven ? "Weekly rhythm" : "Your rhythm")
+                .awairaCardTitle(20)
+                .foregroundStyle(AwairaPalette.text)
+
+            HStack(alignment: .bottom, spacing: 12) {
+                HStack(alignment: .lastTextBaseline, spacing: 9) {
                     Text("\(rangeTotal)")
-                        .awairaFigure(58)
+                        .awairaFigure(39)
                         .foregroundStyle(AwairaPalette.accent)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.65)
+                        .minimumScaleFactor(0.62)
                     Text("approaches")
-                        .scaledFont(17, weight: .medium)
+                        .scaledFont(15, weight: .medium)
                         .foregroundStyle(AwairaPalette.text)
-                    HStack(spacing: 7) {
+                        .padding(.bottom, 5)
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 3) {
+                    HStack(spacing: 6) {
                         Circle().fill(AwairaPalette.rate).frame(width: 10, height: 10)
-                        Text("\(rateText(rangeRate) ?? "—")/hr avg")
-                            .scaledFont(13, weight: .medium)
-                            .fixedSize()
+                        Text("\(rateText(rangeRate) ?? "—")/hr")
+                            .awairaStat(14)
                             .foregroundStyle(AwairaPalette.rate)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(AwairaPalette.rate.opacity(0.10), in: Capsule())
-                    .overlay(Capsule().strokeBorder(AwairaPalette.rate.opacity(0.34), lineWidth: 1))
-                    Text(rangePrevented > 0 ? "\(rangePrevented) ended early this \(range == .seven ? "week" : "period")" : "Your history will appear here")
-                        .awairaSubtitle(15)
-                        .foregroundStyle(AwairaPalette.ink.opacity(0.70))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 3)
+                    Text("average")
+                        .awairaSubtitle(12)
+                        .foregroundStyle(AwairaPalette.ink.opacity(0.58))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                PatternTrend(values: rhythmValues, labels: rhythmLabels)
-                    .frame(height: 150)
+                .padding(.bottom, 4)
             }
+
+            WeeklyRhythmChart(values: rhythmValues, labels: rhythmLabels)
+                .frame(height: 80)
+                .accessibilityLabel("Activity by day")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .awairaCard(padding: 20)
+        .awairaCard(padding: 12)
     }
 
-    // MARK: - Strongest pattern
+    // MARK: - Pattern summary
 
-    private var strongestPatternCard: some View {
-        HStack(spacing: 13) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .scaledFont(17)
-                .foregroundStyle(AwairaPalette.accent)
-                .frame(width: 40, height: 40)
-                .background(AwairaPalette.accent.opacity(0.12), in: Circle())
-                .overlay(Circle().strokeBorder(AwairaPalette.accent.opacity(0.28), lineWidth: 1))
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Your strongest pattern")
-                    .awairaCaption(14)
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.64))
-                Text(patternTitle)
-                    .scaledFont(17, weight: .semibold)
-                    .foregroundStyle(AwairaPalette.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(patternWindow)
-                    .awairaStat(14)
-                    .foregroundStyle(AwairaPalette.accent)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Button {
-                showingPatternHelp = true
-            } label: {
-                Text("Explore")
-                    .scaledFont(13, weight: .semibold)
-                    .foregroundStyle(AwairaPalette.accent)
-                    .awairaPill(horizontal: 14, vertical: 8)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity)
-        .awairaCard(padding: 14)
-    }
-
-    // MARK: - Daily rhythm
-
-    private var rhythmCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Your rhythm")
-                .awairaCardTitle()
-                .foregroundStyle(AwairaPalette.text)
-            DailyRhythm(values: hourlyValues)
-                .frame(height: 142)
-            Text(rhythmNote)
-                .awairaSubtitle(15)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.70))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .awairaCard(padding: 18)
-    }
-
-    // MARK: - Reflections
-
-    private var reflectionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Reflections")
-                .awairaCardTitle(24)
-                .foregroundStyle(AwairaPalette.text)
-            Text("\(rangeJournalEntries.count) moment\(rangeJournalEntries.count == 1 ? "" : "s") captured")
-                .awairaSubtitle(15)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.66))
-
-            if contextBreakdown.isEmpty {
-                MobileEmptyNote(text: "Optional reflections add a little context to your rhythm.",
-                                symbol: "square.and.pencil")
-            } else {
-                VStack(spacing: 14) {
-                    ForEach(Array(contextBreakdown.enumerated()), id: \.element.activity) { index, item in
-                        reflectionRow(item, color: contextColor(index: index))
+    /// Keeping the strongest window and the short "what happened" breakdown together gives the
+    /// page a compact middle beat without losing the context people have recorded.
+    private var patternAndReflectionsCard: some View {
+        Button { showingPatternHelp = true } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 11) {
+                    Image(systemName: "moon.fill")
+                        .scaledFont(20, weight: .medium)
+                        .foregroundStyle(AwairaPalette.rate)
+                        .frame(width: 44, height: 44)
+                        .background(AwairaPalette.rate.opacity(0.12), in: Circle())
+                        .overlay(Circle().strokeBorder(AwairaPalette.rate.opacity(0.52), lineWidth: 1))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Strongest pattern")
+                            .awairaSubtitle(12)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+                        Text(patternTitle)
+                            .awairaCardTitle(17)
+                            .foregroundStyle(AwairaPalette.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.76)
+                        Text(patternWindow)
+                            .awairaStat(13)
+                            .foregroundStyle(AwairaPalette.accent)
+                    }
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Reflections")
+                            .awairaSubtitle(12)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+                        Text("\(rangeJournalEntries.count) captured")
+                            .awairaStat(13)
+                            .foregroundStyle(AwairaPalette.text)
                     }
                 }
-                .padding(.top, 3)
+
+                Divider().overlay(AwairaPalette.cardBorder)
+
+                if contextBreakdown.isEmpty {
+                    HStack {
+                        Text("What happened")
+                            .awairaSubtitle(12)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+                        Spacer()
+                        Text("No moments yet")
+                            .awairaSubtitle(12)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.55))
+                    }
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(Array(contextBreakdown.prefix(3).enumerated()), id: \.element.activity) { index, item in
+                            reflectionSummaryRow(item, color: contextColor(index: index))
+                        }
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .awairaCard(padding: 18)
+        .buttonStyle(.plain)
+        .accessibilityHint("Learn how patterns are calculated. It also shows your reflection count.")
+        .awairaCard(padding: 12)
     }
 
-    private func reflectionRow(_ item: ContextBreakdown, color: Color) -> some View {
-        HStack(spacing: 12) {
-            Circle().fill(color).frame(width: 12, height: 12)
+    private func reflectionSummaryRow(_ item: ContextBreakdown, color: Color) -> some View {
+        HStack(spacing: 7) {
+            Circle().fill(color).frame(width: 6, height: 6)
             Text(item.activity)
-                .scaledFont(17)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.78))
-                .frame(width: 115, alignment: .leading)
+                .awairaSubtitle(12)
+                .foregroundStyle(AwairaPalette.text)
+                .lineLimit(1)
+            Spacer(minLength: 4)
             GeometryReader { proxy in
                 Capsule()
                     .fill(AwairaPalette.ink.opacity(0.12))
@@ -181,19 +174,39 @@ struct MobileInsightsView: View {
                         Capsule().fill(color).frame(width: max(4, proxy.size.width * item.share))
                     }
             }
-            .frame(height: 9)
+            .frame(width: 54, height: 6)
             Text("\(Int((item.share * 100).rounded()))%")
-                .awairaStat(16)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.75))
-                .frame(width: 42, alignment: .trailing)
+                .awairaStat(12)
+                .foregroundStyle(AwairaPalette.text)
+                .frame(width: 30, alignment: .trailing)
         }
+    }
+
+    // MARK: - Daily rhythm
+
+    private var dailyRhythmCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Daily rhythm")
+                    .awairaCardTitle(20)
+                    .foregroundStyle(AwairaPalette.text)
+                Spacer(minLength: 6)
+                Text(range == .seven ? "Last 7 days" : "This period")
+                    .awairaSubtitle(12)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+            }
+            DailyRhythmChart(values: hourlyValues, peakHour: peakHour)
+                .frame(height: 87)
+                .accessibilityLabel("Activity by hour")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .awairaCard(padding: 12)
     }
 
     // MARK: - Data
 
     private var rangeDays: [MobileStatsStore.DayBar] { Array(detector.history.suffix(range.days)) }
     private var rangeTotal: Int { rangeDays.reduce(0) { $0 + $1.interruptions } }
-    private var rangePrevented: Int { rangeDays.reduce(0) { $0 + $1.prevented } }
     private var rangeRate: Double {
         MobileStatsStore.hourlyRate(interruptions: rangeTotal,
                                     activeSeconds: rangeDays.reduce(0) { $0 + $1.activeSeconds })
@@ -245,7 +258,7 @@ struct MobileInsightsView: View {
 
     private var rhythmNote: String {
         guard let peak = peakHour else { return "As your days fill in, this curve will show when activity tends to gather." }
-        return "Your highest activity gathered around \(Self.hourText(peak)) in this \(range == .seven ? "week" : "period")."
+        return "Activity peaks around \(Self.hourText(peak))."
     }
 
     private var rangeJournalEntries: [JournalEntry] {
@@ -265,9 +278,6 @@ struct MobileInsightsView: View {
         }.prefix(4).map { $0 }
     }
 
-    /// Categorical colour drawn from the palette rather than from a fresh set of hues. Purple and
-    /// coral belong to no other surface in either app, so a reflection topic wearing them could not
-    /// be related back to anything the rest of the product draws.
     private func contextColor(index: Int) -> Color {
         [AwairaPalette.accent, AwairaPalette.rate, AwairaPalette.live, AwairaPalette.streak][min(index, 3)]
     }
@@ -306,110 +316,153 @@ private struct ContextBreakdown {
     let share: Double
 }
 
-/// A seven-point trend with the reference's blue-to-amber finish and individual day markers.
-private struct PatternTrend: View {
+/// A compact column chart with subdued guides: it makes the latest active day read immediately
+/// while zero-activity days remain visible as dots on the baseline.
+private struct WeeklyRhythmChart: View {
     let values: [Int]
     let labels: [String]
 
     var body: some View {
         VStack(spacing: 7) {
             GeometryReader { geo in
-                let points = chartPoints(in: geo.size)
-                ZStack(alignment: .bottomLeading) {
-                    ForEach(points.indices, id: \.self) { index in
+                let source = values.isEmpty ? [0] : values
+                let top = chartTop(for: source)
+                let plot = CGRect(x: 30, y: 5, width: max(1, geo.size.width - 30), height: max(1, geo.size.height - 24))
+                ZStack(alignment: .topLeading) {
+                    ForEach([0.0, 0.5, 1.0], id: \.self) { fraction in
+                        let y = plot.maxY - plot.height * fraction
                         Path { path in
-                            path.move(to: CGPoint(x: points[index].x, y: points[index].y))
-                            path.addLine(to: CGPoint(x: points[index].x, y: geo.size.height))
+                            path.move(to: CGPoint(x: plot.minX, y: y))
+                            path.addLine(to: CGPoint(x: plot.maxX, y: y))
                         }
-                        .stroke(AwairaPalette.accent.opacity(0.38), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                        .stroke(AwairaPalette.ink.opacity(fraction == 0 ? 0.48 : 0.16),
+                                style: StrokeStyle(lineWidth: fraction == 0 ? 1 : 0.8, dash: fraction == 0 ? [] : [5, 5]))
+                        Text("\(Int((Double(top) * fraction).rounded()))")
+                            .scaledFont(11, weight: .medium)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.72))
+                            .frame(width: 23, alignment: .trailing)
+                            .position(x: 11, y: y)
                     }
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: geo.size.height - 1))
-                        path.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height - 1))
-                    }
-                    .stroke(AwairaPalette.ink.opacity(0.22), lineWidth: 1)
-                    PatternLine(points: points)
-                        .stroke(AwairaPalette.accent,
-                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    ForEach(points.indices, id: \.self) { index in
-                        Circle()
-                            .fill(index == points.count - 1 ? AwairaPalette.rate : AwairaPalette.accent)
-                            .frame(width: index == points.count - 1 ? 14 : 9, height: index == points.count - 1 ? 14 : 9)
-                            .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 1.5))
-                            .position(points[index])
+
+                    ForEach(source.indices, id: \.self) { index in
+                        let unit = plot.width / CGFloat(source.count)
+                        let height = max(0, plot.height * CGFloat(source[index]) / CGFloat(top))
+                        let x = plot.minX + unit * (CGFloat(index) + 0.5)
+                        if height > 0 {
+                            RoundedRectangle(cornerRadius: min(10, max(3, height / 2)), style: .continuous)
+                                .fill(LinearGradient(colors: [AwairaPalette.accent.opacity(0.82), AwairaPalette.accent],
+                                                     startPoint: .bottom, endPoint: .top))
+                                .frame(width: min(36, max(12, unit * 0.40)), height: height)
+                                .position(x: x, y: plot.maxY - height / 2)
+                        } else {
+                            Circle()
+                                .fill(AwairaPalette.accent)
+                                .frame(width: 9, height: 9)
+                                .position(x: x, y: plot.maxY)
+                        }
                     }
                 }
             }
-            HStack {
+            .clipped()
+
+            HStack(spacing: 0) {
                 ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
                     Text(label)
-                        .scaledFont(10)
-                        .foregroundStyle(AwairaPalette.ink.opacity(0.72))
+                        .scaledFont(12, weight: .medium)
+                        .foregroundStyle(AwairaPalette.ink.opacity(0.70))
                         .lineLimit(1)
-                        .fixedSize()
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
                 }
             }
+            .padding(.leading, 30)
         }
     }
 
-    private func chartPoints(in size: CGSize) -> [CGPoint] {
-        let safeValues = values.isEmpty ? [0] : values
-        let maximum = max(safeValues.max() ?? 0, 1)
-        return safeValues.enumerated().map { index, value in
-            let x = size.width * CGFloat(index) / CGFloat(max(safeValues.count - 1, 1))
-            let y = size.height - 8 - CGFloat(value) / CGFloat(maximum) * (size.height - 38)
-            return CGPoint(x: x, y: y)
-        }
+    private func chartTop(for source: [Int]) -> Int {
+        let maximum = max(source.max() ?? 0, 1)
+        return max(3, Int(ceil(Double(maximum) / 6.0)) * 6)
     }
 }
 
-private struct DailyRhythm: View {
+private struct DailyRhythmChart: View {
     let values: [Int]
+    let peakHour: Int?
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 7) {
             GeometryReader { geo in
-                let points = points(in: geo.size)
-                ZStack(alignment: .bottomLeading) {
+                let plot = CGRect(x: 0, y: 20, width: geo.size.width, height: max(1, geo.size.height - 29))
+                let points = chartPoints(in: plot)
+                ZStack(alignment: .topLeading) {
+                    Path { path in
+                        path.move(to: CGPoint(x: plot.minX, y: plot.maxY))
+                        path.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
+                    }
+                    .stroke(AwairaPalette.ink.opacity(0.42), lineWidth: 1)
+
                     PatternLine(points: points)
                         .stroke(AwairaPalette.accent,
-                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    ForEach(points.indices, id: \.self) { index in
-                        if index == peakIndex || index == 0 || index == 12 {
-                            Circle()
-                                .fill(index == peakIndex ? AwairaPalette.rate : AwairaPalette.live)
-                                .frame(width: 12, height: 12)
-                                .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 1.5))
-                                .position(points[index])
+                                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                    if let peakHour, values.indices.contains(peakHour), values[peakHour] > 0 {
+                        let peak = points[peakHour]
+                        Path { path in
+                            path.move(to: CGPoint(x: peak.x, y: peak.y + 8))
+                            path.addLine(to: CGPoint(x: peak.x, y: plot.maxY))
                         }
+                        .stroke(AwairaPalette.rate.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        Text(hourText(peakHour))
+                            .scaledFont(12, weight: .medium)
+                            .foregroundStyle(AwairaPalette.text)
+                            .position(x: peak.x, y: 8)
+                        Circle()
+                            .fill(AwairaPalette.rate)
+                            .frame(width: 14, height: 14)
+                            .overlay(Circle().strokeBorder(AwairaPalette.statsSurface, lineWidth: 2))
+                            .position(peak)
                     }
+
                     HStack(spacing: 0) {
-                        ForEach(0..<24, id: \.self) { _ in
-                            Circle().fill(AwairaPalette.ink.opacity(0.32)).frame(width: 3, height: 3).frame(maxWidth: .infinity)
+                        ForEach(0..<25, id: \.self) { _ in
+                            Rectangle()
+                                .fill(AwairaPalette.ink.opacity(0.35))
+                                .frame(width: 1, height: 5)
+                                .frame(maxWidth: .infinity)
                         }
                     }
-                    .position(x: geo.size.width / 2, y: geo.size.height - 4)
+                    .position(x: plot.midX, y: plot.maxY)
                 }
             }
             HStack {
-                Text("12 AM"); Spacer(); Text("12 PM"); Spacer(); Text("Now").foregroundStyle(AwairaPalette.accent)
+                Text("12 AM")
+                Spacer()
+                Text("6 AM")
+                Spacer()
+                Text("12 PM")
+                Spacer()
+                Text("6 PM")
+                Spacer()
+                Text("12 AM")
             }
-            .scaledFont(11)
+            .scaledFont(11, weight: .medium)
             .foregroundStyle(AwairaPalette.ink.opacity(0.68))
         }
     }
 
-    private var peakIndex: Int { values.indices.max(by: { values[$0] < values[$1] }) ?? 0 }
-
-    private func points(in size: CGSize) -> [CGPoint] {
+    private func chartPoints(in plot: CGRect) -> [CGPoint] {
         let source = values.count == 24 ? values : Array(repeating: 0, count: 24)
         let maximum = max(source.max() ?? 0, 1)
         return source.enumerated().map { index, value in
-            let x = size.width * CGFloat(index) / CGFloat(max(source.count - 1, 1))
-            let y = size.height - 19 - CGFloat(value) / CGFloat(maximum) * (size.height - 51)
+            let x = plot.minX + plot.width * CGFloat(index) / CGFloat(max(source.count - 1, 1))
+            let y = plot.maxY - 9 - CGFloat(value) / CGFloat(maximum) * (plot.height - 22)
             return CGPoint(x: x, y: y)
         }
+    }
+
+    private func hourText(_ hour: Int) -> String {
+        let value = hour % 12 == 0 ? 12 : hour % 12
+        return "\(value) \(hour < 12 ? "AM" : "PM")"
     }
 }
 

@@ -13,6 +13,9 @@ import SwiftUI
 struct MobilePage<Content: View>: View {
     let title: String
     var subtitle: String?
+    /// Most destinations use the compact 28pt display role. Patterns is an analytical landing
+    /// page, so it can opt into a stronger, poster-like heading without making every tab louder.
+    var titleSize: CGFloat = 28
     /// Pinned above the scrolling content. Today puts its camera switch here; the reading pages
     /// carry only the brand lockup.
     var accessory: AnyView?
@@ -36,7 +39,7 @@ struct MobilePage<Content: View>: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
-                    MobilePageTitle(title: title, subtitle: subtitle)
+                    MobilePageTitle(title: title, subtitle: subtitle, titleSize: titleSize)
                         .padding(.bottom, 2)
                     content()
                 }
@@ -54,11 +57,12 @@ struct MobilePage<Content: View>: View {
 struct MobilePageTitle: View {
     let title: String
     var subtitle: String?
+    var titleSize: CGFloat = 28
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .awairaDisplay()
+                .awairaDisplay(titleSize)
                 .foregroundStyle(AwairaPalette.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
