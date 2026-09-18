@@ -1,12 +1,17 @@
 import SwiftUI
 
-/// The iPhone version of Awaira's desktop onboarding. It keeps the same education and reflective
-/// questions, but it never asks iOS for a permission: camera access remains a separate, explicit
-/// choice on the main screen after this flow ends.
+/// The iPhone version of Awaira's desktop onboarding: the same education and reflective questions,
+/// then the four detection checks, then the cue picker.
+///
+/// The checks are where the camera is first asked for — they cannot show detection working without
+/// it. Everything before them still asks for nothing, and the privacy page says so in those words.
 struct IPhoneOnboardingView: View {
+    /// Shared with `ContentView`, so the session the checks start is the one the app goes on using.
+    @ObservedObject var detector: Detector
     var onFinish: () -> Void
 
     @State private var index = 0
+    @StateObject private var checkState = MobileDetectionCheckState()
     @State private var answers: [String: Set<String>] = [:]
     @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
     @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
@@ -36,6 +41,13 @@ struct IPhoneOnboardingView: View {
         // Replaying onboarding shows the answers already given, as the Mac's does — every question
         // opens on its stored choice, so a second run is an edit rather than a blank form.
         .onAppear(perform: restoreSavedAnswers)
+        // Reaching the checks is what asks iOS for the camera. It stays on — and silent — for the
+        // rest of the flow; `finish()` hands it back to the app in its normal, recording mode.
+        .onChange(of: index) { _, newIndex in
+            guard case .detectionCheck = onboardingSteps[newIndex].kind else { return }
+            detector.calibrating = true
+            detector.start()
+        }
     }
 
     private var header: some View {
@@ -63,6 +75,9 @@ struct IPhoneOnboardingView: View {
         switch step.kind {
         case .education(let page): educationPage(page)
         case .question(let question): questionPage(question)
+        case .detectionCheck(let page):
+            MobileDetectionCheckView(page: page, accent: step.accent, detector: detector,
+                                     state: checkState, onSkip: skipChecks)
         case .nudge: nudgePage
         }
     }
@@ -226,7 +241,9 @@ struct IPhoneOnboardingView: View {
     private var canAdvance: Bool {
         switch step.kind {
         case .question(let question): return !(answers[question.key, default: []].isEmpty)
-        case .education, .nudge: return true
+        // A phone without a working camera, or one whose owner declined it, must still be able to
+        // finish onboarding — so the checks gate nothing.
+        case .education, .detectionCheck, .nudge: return true
         }
     }
 
@@ -249,9 +266,17 @@ struct IPhoneOnboardingView: View {
         }
     }
 
+    /// Past the whole block, to the cue picker. For anyone who does not want to rehearse, or whose
+    /// phone has no usable camera.
+    private func skipChecks() {
+        withAnimation(.easeInOut(duration: 0.22)) { index = nudgeStepIndex }
+    }
+
     private func finish() {
         let defaults = UserDefaults.standard
         for (key, values) in answers { defaults.set(values.sorted().joined(separator: ","), forKey: key) }
+        // Back to normal: from here detections count and the chosen cues fire.
+        detector.calibrating = false
         onFinish()
     }
 }
@@ -290,7 +315,10 @@ private struct MobileOnboardingIllustration: View {
 }
 
 private struct OnboardingStep {
-    enum Kind { case education(EducationPage), question(OnboardingQuestion), nudge }
+    enum Kind {
+        case education(EducationPage), question(OnboardingQuestion)
+        case detectionCheck(MobileDetectionCheckPage), nudge
+    }
     let kind: Kind
     let accent: Color
     let cta: String
@@ -321,7 +349,10 @@ private let onboardingSteps: [OnboardingStep] = {
         .init(symbol: "chart.line.uptrend.xyaxis", accent: .green, title: "Private patterns, if you want them.", body: "Your on-device history can help you reflect on the moments you choose to notice. It is not a score or a measure of your health."),
         .init(symbol: "arrow.uturn.backward.circle.fill", accent: .cyan, title: "Here's what happens, step by step.", body: "You reach up. Awaira notices. A gentle visual cue appears—not a blocker, not an alarm. You lower your hand and carry on."),
         .init(symbol: "hand.point.up.left.fill", accent: .yellow, title: "A movement is just a movement.", body: "Thinking, resting your chin, scratching an itch, and adjusting glasses are all normal. A cue is only an invitation to notice, never a judgement or health conclusion."),
-        .init(symbol: "lock.shield.fill", accent: .blue, title: "Privacy isn't a feature here—it's the whole design.", body: "Camera frames, detections, selected behavior, and progress history are not uploaded. Detection runs on this iPhone, even without an internet connection. This onboarding will not ask for any permissions.")
+        // The permission sentence names the camera on purpose: the detection checks a few screens
+        // later ask for it, and a promise made here that the flow then breaks is worse than no
+        // promise at all. What has not changed is the part that matters — nothing leaves the phone.
+        .init(symbol: "lock.shield.fill", accent: .blue, title: "Privacy isn't a feature here—it's the whole design.", body: "Camera frames, detections, selected behavior, and progress history are not uploaded. Detection runs on this iPhone, even without an internet connection. In a moment Awaira will ask for the camera, so you can watch detection work before you decide anything.")
     ]
     let questions: [OnboardingQuestion] = [
         .init(key: "behaviors", title: "What would you like to notice?", helper: "Awaira notices hand-to-face motion, not a behaviour or diagnosis.", footer: nil, options: ["Movement toward hair", "Movement toward nails", "Movement toward face or skin", "General hand-to-face awareness"], multiple: true, accent: .indigo),
@@ -329,7 +360,19 @@ private let onboardingSteps: [OnboardingStep] = {
         .init(key: "contexts", title: "When does it happen most?", helper: "We'll use this to show when you're most vulnerable to automatic habits.", footer: nil, options: ["Working on computer", "During meetings", "While coding", "While thinking", "Studying", "Watching videos", "Reading", "Gaming", "During stress", "During boredom"], multiple: true, accent: .orange),
         .init(key: "goal", title: "What would feel useful?", helper: "", footer: nil, options: ["Notice patterns", "Take a pause", "Choose a cue", "Keep a private reflection"], multiple: false, accent: .purple)
     ]
+    // The four checks go last before the cue picker: by then the person knows what Awaira watches
+    // for, and the picker stops being a blind choice.
+    let checks = MobileDetectionCheckPage.allCases.map {
+        OnboardingStep(kind: .detectionCheck($0), accent: .blue, cta: "Continue")
+    }
     return pages.map { .init(kind: .education($0), accent: $0.accent, cta: "Continue") }
         + questions.map { .init(kind: .question($0), accent: $0.accent, cta: "Continue") }
+        + checks
         + [.init(kind: .nudge, accent: .purple, cta: "Continue")]
 }()
+
+/// Index of the cue picker — where "Skip" on the first check lands.
+private let nudgeStepIndex: Int = onboardingSteps.firstIndex {
+    if case .nudge = $0.kind { return true }
+    return false
+} ?? 0
