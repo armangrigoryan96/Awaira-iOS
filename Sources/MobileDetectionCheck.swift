@@ -2,29 +2,31 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// The four detection checks, the phone's version of the desktop app's `DetectionCheckStep.swift`.
+/// The five detection checks, the phone's version of the desktop app's `DetectionCheckStep.swift`.
 ///
 /// They sit at the end of onboarding, just before the cue picker: see yourself found, make the
-/// movement on purpose and watch it register, feel and hear the alert, then a summary. Choosing a
-/// cue is a blind choice otherwise — nobody has yet seen a hand-to-face movement register.
+/// movement on purpose and watch it register, feel and hear the alert, hold the hand there for the
+/// second and longer cue, then a summary. Choosing a cue is a blind choice otherwise — nobody has
+/// yet seen a hand-to-face movement register.
 ///
 /// This is the one place the camera is shown back. Nothing these screens see is recorded: the
 /// detector runs in `calibrating` mode for the whole of the rest of onboarding, so a rehearsed
 /// movement never reaches the day's history and never buzzes the phone.
 enum MobileDetectionCheckPage: Int, CaseIterable {
-    case camera, movement, alert, summary
+    case camera, movement, alert, linger, summary
 
-    /// 1-based position, for the "2 / 4" counter.
+    /// 1-based position, for the "2 / 5" counter.
     var number: Int { rawValue + 1 }
 }
 
-/// What the person has managed to verify. Owned by the onboarding view so it survives the four
+/// What the person has managed to verify. Owned by the onboarding view so it survives the five
 /// step changes.
 @MainActor
 final class MobileDetectionCheckState: ObservableObject {
     @Published var sawFace = false
     @Published var sawTouch = false
     @Published var playedAlert = false
+    @Published var heardSustained = false
 }
 
 // MARK: - Step
@@ -42,6 +44,11 @@ struct MobileDetectionCheckView: View {
     @State private var showBubble = false
     @State private var bubbleTask: Task<Void, Never>?
 
+    /// True while the sustained cue is being held by a live touch rather than by the "Try it"
+    /// button. Drives the bubble over the picture and the line under the button.
+    @State private var sustainedByHand = false
+    @State private var sustainedPreviewTask: Task<Void, Never>?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
@@ -53,7 +60,8 @@ struct MobileDetectionCheckView: View {
                 hintCard
             }
 
-            if page == .alert { hearItButton }
+            if page == .alert  { hearItButton }
+            if page == .linger { lingerControls }
 
             if page == .camera {
                 Button("Skip", action: onSkip)
@@ -64,22 +72,42 @@ struct MobileDetectionCheckView: View {
             }
         }
         .padding(.top, 24)
+        // Each step is its own view, so `onChange` never reports state that was already true when
+        // this one was built — a face found during a step transition would otherwise leave the
+        // summary claiming the camera was never tested.
+        .onAppear {
+            if detector.hasFace  { state.sawFace = true }
+            if detector.touching { state.sawTouch = true }
+            if page == .linger && detector.touchLevel >= 3 { startSustained(fromHand: true) }
+        }
         .onChange(of: detector.hasFace) { _, hasFace in
             if hasFace { state.sawFace = true }
         }
         .onChange(of: detector.touching) { _, touching in
             guard touching else { return }
             state.sawTouch = true
-            if page == .alert { fireAlert() }
+            // The linger screen fires the alert too: the short cue arriving first is what makes the
+            // sustained one that follows read as a second, different thing.
+            if page == .alert || page == .linger { fireAlert() }
         }
-        .onDisappear { bubbleTask?.cancel() }
+        // Mirrors what `Detector` does at level 3 when the cues are live, so the rehearsal is timed
+        // exactly like the real thing.
+        .onChange(of: detector.touchLevel) { _, level in
+            guard page == .linger else { return }
+            if level >= 3 { startSustained(fromHand: true) }
+            else if level == 0 { stopSustained() }
+        }
+        .onDisappear {
+            bubbleTask?.cancel()
+            stopSustained()
+        }
     }
 
     // MARK: Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(page.number) / 4")
+            Text("\(page.number) / 5")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(accent)
 
@@ -99,6 +127,7 @@ struct MobileDetectionCheckView: View {
         case .camera:   return "Let's test detection"
         case .movement: return "Try a hand-to-face movement"
         case .alert:    return "Test the alert"
+        case .linger:   return "Now hold your hand there"
         case .summary:  return "You're ready!"
         }
     }
@@ -111,6 +140,8 @@ struct MobileDetectionCheckView: View {
             return "Now move your hand towards your face — touch your chin or mouth, for example. Awaira should detect it."
         case .alert:
             return "When a hand-to-face movement is detected, Awaira can nudge you with a short sound and a buzz."
+        case .linger:
+            return "That short cue fires the moment your hand arrives. If it stays, a soft tone and a steady buzz come in instead, and keep going until you lower your hand."
         case .summary:
             return "Here's what's working. Next, pick the cues you want Awaira to use."
         }
@@ -201,7 +232,8 @@ struct MobileDetectionCheckView: View {
 
     private var bubble: some View {
         VStack {
-            Label("Hey, keep going 💙", systemImage: "speaker.wave.2.fill")
+            Label(sustainedByHand ? "Still with you 💙" : "Hey, keep going 💙",
+                  systemImage: "speaker.wave.2.fill")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.black)
                 .padding(.horizontal, 14)
@@ -250,6 +282,9 @@ struct MobileDetectionCheckView: View {
         case .movement:
             hint = ("viewfinder", "Make the movement",
                     "The moment your hand reaches your face, the box around your head turns red.")
+        case .linger:
+            hint = ("hand.raised.fill", "Hold it there a moment",
+                    "The tone and the buzz stop on their own the moment your hand comes away. You pick which cues to keep on the next screen, and can change them anytime in Settings.")
         default:
             hint = ("speaker.wave.2.fill", "Listen and feel",
                     "You should hear a short sound and feel a buzz the moment the movement is detected. You can pick which cues to use on the next screen, and change them anytime in Settings.")
@@ -303,6 +338,73 @@ struct MobileDetectionCheckView: View {
         }
     }
 
+    // MARK: Linger
+
+    /// The button is the way in for a phone whose camera was declined, or for anyone who would
+    /// rather not sit holding a hand to their face: it runs the same pair for three seconds.
+    private var lingerControls: some View {
+        VStack(spacing: 10) {
+            Button {
+                if sustainedPreviewTask != nil || sustainedByHand { stopSustained() }
+                else { startSustainedPreview() }
+            } label: {
+                Label(sustainedPreviewTask != nil || sustainedByHand ? "Stop" : "Try it",
+                      systemImage: sustainedPreviewTask != nil || sustainedByHand ? "stop.fill" : "play.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(accent.opacity(0.14), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Text(sustainedByHand
+                 ? "That's it — lower your hand and it stops."
+                 : "Hold your hand at your face and give it a few seconds.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Both sustained cues at once, because that is what the app does at level 3. They are started
+    /// here rather than left to `Detector`: it keeps every cue silent while `calibrating`, and the
+    /// person has not chosen which of them to keep yet — that is the very next screen.
+    private func startSustained(fromHand: Bool) {
+        // A preview started a moment ago must not cut a live linger short three seconds later.
+        sustainedPreviewTask?.cancel()
+        sustainedPreviewTask = nil
+        Haptics.startSustained()
+        CalmingTone.startSustained()
+        state.heardSustained = true
+        if fromHand {
+            sustainedByHand = true
+            bubbleTask?.cancel()
+            withAnimation(.easeOut(duration: 0.25)) { showBubble = true }
+        }
+    }
+
+    private func startSustainedPreview() {
+        startSustained(fromHand: false)
+        sustainedPreviewTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            stopSustained()
+        }
+    }
+
+    private func stopSustained() {
+        sustainedPreviewTask?.cancel()
+        sustainedPreviewTask = nil
+        Haptics.stopSustained()
+        CalmingTone.stopSustained()
+        if sustainedByHand {
+            sustainedByHand = false
+            withAnimation(.easeIn(duration: 0.3)) { showBubble = false }
+        }
+    }
+
     // MARK: Summary
 
     private var summaryCard: some View {
@@ -310,6 +412,8 @@ struct MobileDetectionCheckView: View {
             summaryRow("Camera detection", done: "Working correctly", passed: state.sawFace)
             Divider().padding(.leading, 38)
             summaryRow("Alert", done: "Playing correctly", passed: state.playedAlert)
+            Divider().padding(.leading, 38)
+            summaryRow("Lingering cue", done: "Holding while your hand stays", passed: state.heardSustained)
             Divider().padding(.leading, 38)
             summaryRow("Tracking", done: "Ready to log your progress", passed: state.sawTouch)
         }
@@ -342,7 +446,7 @@ struct MobileDetectionCheckView: View {
 
 // MARK: - Camera preview
 
-/// The live camera, for the four checks and nowhere else in the app.
+/// The live camera, for the five checks and nowhere else in the app.
 ///
 /// Mirrored on purpose: the detector leaves the pixels it measures unmirrored and mirrors the
 /// coordinates it publishes instead (see `Detector.displayRect`), so the picture has to be the
