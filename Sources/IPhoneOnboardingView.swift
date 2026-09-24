@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The iPhone version of Awaira's desktop onboarding: the same education and reflective questions,
-/// then the four detection checks, then the cue picker.
+/// then the five detection checks, then the cue picker.
 ///
 /// The checks are where the camera is first asked for — they cannot show detection working without
 /// it. Everything before them still asks for nothing, and the privacy page says so in those words.
@@ -360,7 +360,7 @@ private let onboardingSteps: [OnboardingStep] = {
         .init(key: "contexts", title: "When does it happen most?", helper: "We'll use this to show when it happens most.", footer: nil, options: ["Working on computer", "During meetings", "While coding", "While thinking", "Studying", "Watching videos", "Reading", "Gaming", "During stress", "During boredom"], multiple: true, accent: .orange),
         .init(key: "goal", title: "What would feel useful?", helper: "", footer: nil, options: ["Notice patterns", "Take a pause", "Choose a cue", "Keep a private reflection"], multiple: false, accent: .purple)
     ]
-    // The four checks go last before the cue picker: by then the person knows what Awaira watches
+    // The five checks go last before the cue picker: by then the person knows what Awaira watches
     // for, and the picker stops being a blind choice.
     let checks = MobileDetectionCheckPage.allCases.map {
         OnboardingStep(kind: .detectionCheck($0), accent: .blue, cta: "Continue")

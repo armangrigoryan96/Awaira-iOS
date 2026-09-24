@@ -560,7 +560,16 @@ extension Detector: AVCaptureVideoDataOutputSampleBufferDelegate {
         // The two non-visual cues for a lingering hand, each independent and off unless the user
         // switched it on. They keep going until the hand comes down. Blur is the third cue and is
         // handled in the view layer where the screen can actually be dimmed.
-        if out.level >= 3, !calibrating {
+        //
+        // While the onboarding checks run, the rehearsal owns both cues and this loop keeps its
+        // hands off them entirely. It cannot start them — the person has not chosen which to keep
+        // yet — but it must not stop them either: this runs once per processed frame, so the
+        // `else` below used to silence the linger check's tone a fraction of a second after the
+        // check started it. `MobileDetectionCheckView` starts and stops them instead, and
+        // `IPhoneOnboardingView.finish()` clears `calibrating` so the next frame resumes control.
+        if calibrating {
+            // deliberately nothing
+        } else if out.level >= 3 {
             if vibrateEnabled { Haptics.startSustained() } else { Haptics.stopSustained() }
             if voiceEnabled { CalmingTone.startSustained() } else { CalmingTone.stopSustained() }
         } else {
