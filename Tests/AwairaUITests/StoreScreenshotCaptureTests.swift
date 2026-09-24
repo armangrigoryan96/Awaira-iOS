@@ -13,13 +13,18 @@ final class StoreScreenshotCaptureTests: XCTestCase {
         capture(app, named: "03-learn-demo")
     }
 
-    func testCaptureLifetimeUnlockReviewScreen() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-UITest", "-ScreenshotPaywall"]
-        app.launch()
+    /// One App Review image per product, each showing the genuine paywall with that plan selected.
+    func testCapturePremiumReviewScreens() {
+        let plans = [("Monthly", "-ScreenshotMonthly"), ("Yearly", nil), ("Lifetime", "-ScreenshotLifetime")]
+        for (name, argument) in plans {
+            let app = XCUIApplication()
+            app.launchArguments = ["-UITest", "-ScreenshotPaywall"] + [argument].compactMap { $0 }
+            app.launch()
 
-        XCTAssertTrue(app.otherElements["premiumPaywall"].waitForExistence(timeout: 3))
-        capture(app, named: "04-lifetime-unlock-review")
+            XCTAssertTrue(app.otherElements["premiumPaywall"].waitForExistence(timeout: 3))
+            capture(app, named: "Awaira-\(name)-review")
+            app.terminate()
+        }
     }
 
     private func capture(_ app: XCUIApplication, named: String) {

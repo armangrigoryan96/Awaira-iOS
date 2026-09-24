@@ -94,7 +94,7 @@ struct PremiumPaywallView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Image(systemName: "sparkles")
+            Image(systemName: "lock.open.fill")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(AwairaPalette.accent)
                 .frame(width: 52, height: 52)
@@ -103,7 +103,7 @@ struct PremiumPaywallView: View {
             Text("Unlock Awaira Premium")
                 .awairaDisplay(29)
                 .foregroundStyle(AwairaPalette.text)
-            Text("Keep your awareness practice growing with every Premium feature, now and in future updates.")
+            Text("Get every Premium feature, including future updates.")
                 .awairaCaption(15)
                 .foregroundStyle(AwairaPalette.ink.opacity(0.62))
                 .fixedSize(horizontal: false, vertical: true)
@@ -231,7 +231,7 @@ private struct PremiumPlan: Identifiable {
                                      reviewPrice: "$9.99", period: "per month", badge: nil)
     static let yearly = PremiumPlan(id: PremiumStore.yearlyProductID,
                                     title: "Yearly", detail: "Best price for a full year",
-                                    reviewPrice: "$23.99", period: "per year", badge: "BEST VALUE")
+                                    reviewPrice: "$24.99", period: "per year", badge: "BEST VALUE")
     static let lifetime = PremiumPlan(id: PremiumStore.lifetimeProductID,
                                       title: "Lifetime Unlock", detail: "Pay once. Keep Premium forever.",
                                       reviewPrice: "$49.99", period: "one-time purchase", badge: nil)

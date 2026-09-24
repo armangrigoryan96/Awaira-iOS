@@ -19,9 +19,9 @@ final class PremiumStore: ObservableObject {
     }
 
     static let monthlyProductID = productID(for: "AwairaMonthlyProductID",
-                                             fallback: "com.awaira.ios.premium.monthly")
+                                             fallback: "com.awaira.ios.sub.monthly")
     static let yearlyProductID = productID(for: "AwairaYearlyProductID",
-                                            fallback: "com.awaira.ios.premium.yearly")
+                                            fallback: "com.awaira.ios.sub.yearly")
     static let lifetimeProductID = productID(for: "AwairaLifetimeProductID",
                                               fallback: "com.awaira.app.lifetime")
     static let productIDs = [monthlyProductID, yearlyProductID, lifetimeProductID]

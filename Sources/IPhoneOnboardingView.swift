@@ -139,10 +139,10 @@ struct IPhoneOnboardingView: View {
 
     private var nudgePage: some View {
         VStack(alignment: .leading, spacing: 18) {
-            stepTitle("Pick your gentle nudge", helper: "Choose any combination. Awaira only uses the options you check, and you can change them at any time in Settings.")
+            stepTitle("Choose your cues", helper: "Choose any combination. Awaira only uses the options you check, and you can change them at any time in Settings.")
             nudgeToggle(symbol: "iphone.radiowaves.left.and.right", title: "Vibrate", detail: "Buzz while a hand stays near your face.", color: .orange, isOn: $vibrateEnabled)
             nudgeToggle(symbol: "waveform", title: "Voice", detail: "Play the same soft calming tone used in the desktop app.", color: .purple, isOn: $voiceEnabled)
-            nudgeToggle(symbol: "rectangle.on.rectangle", title: "Blur screen", detail: "Soften the screen with an encouraging cue while Awaira is open.", color: .mint, isOn: $blurEnabled)
+            nudgeToggle(symbol: "rectangle.on.rectangle", title: "Blur screen", detail: "Dim the screen briefly while Awaira is open.", color: .mint, isOn: $blurEnabled)
         }
         .padding(.top, 30)
     }
@@ -343,21 +343,21 @@ private struct OnboardingQuestion {
 
 private let onboardingSteps: [OnboardingStep] = {
     let pages: [EducationPage] = [
-        .init(symbol: "hand.raised.fill", accent: .indigo, title: "Notice a moment sooner.", body: "Awaira notices hand-to-face movements while you work, study, read, or watch videos. It cannot tell why a movement happened or label it."),
-        .init(symbol: "eye.fill", accent: .mint, title: "An optional moment of awareness.", body: "A calm cue can make a hand-to-face movement easier to notice. You choose which cues to use and can change them at any time."),
-        .init(symbol: "brain.head.profile", accent: .orange, title: "No judgement, no diagnosis.", body: "A movement is just a movement. Awaira does not diagnose a condition or decide what you intended to do."),
-        .init(symbol: "chart.line.uptrend.xyaxis", accent: .green, title: "Private patterns, if you want them.", body: "Your on-device history can help you reflect on the moments you choose to notice. It is not a score or a measure of your health."),
-        .init(symbol: "arrow.uturn.backward.circle.fill", accent: .cyan, title: "Here's what happens, step by step.", body: "You reach up. Awaira notices. A gentle visual cue appears—not a blocker, not an alarm. You lower your hand and carry on."),
-        .init(symbol: "hand.point.up.left.fill", accent: .yellow, title: "A movement is just a movement.", body: "Thinking, resting your chin, scratching an itch, and adjusting glasses are all normal. A cue is only an invitation to notice, never a judgement or health conclusion."),
+        .init(symbol: "hand.raised.fill", accent: .indigo, title: "Notice a moment sooner.", body: "Awaira notices hand to face movements while you work, study, read, or watch videos. It cannot tell why a movement happened or label it."),
+        .init(symbol: "eye.fill", accent: .mint, title: "Optional cues.", body: "A calm cue can make a hand to face movement easier to notice. You choose which cues to use and can change them at any time."),
+        .init(symbol: "brain.head.profile", accent: .orange, title: "Awaira doesn't diagnose.", body: "A movement is just a movement. Awaira does not diagnose a condition or decide what you intended to do."),
+        .init(symbol: "chart.line.uptrend.xyaxis", accent: .green, title: "Your history stays private.", body: "Your on-device history can help you reflect on the moments you choose to notice. It is not a score or a measure of your health."),
+        .init(symbol: "arrow.uturn.backward.circle.fill", accent: .cyan, title: "How it works", body: "When your hand moves toward your face, Awaira shows a short visual cue. Lower your hand and carry on."),
+        .init(symbol: "hand.point.up.left.fill", accent: .yellow, title: "Most touches are normal.", body: "Thinking, resting your chin, scratching an itch, and adjusting glasses are all normal. A cue just helps you notice. It isn't a judgement or a health conclusion."),
         // The permission sentence names the camera on purpose: the detection checks a few screens
         // later ask for it, and a promise made here that the flow then breaks is worse than no
         // promise at all. What has not changed is the part that matters — nothing leaves the phone.
-        .init(symbol: "lock.shield.fill", accent: .blue, title: "Privacy isn't a feature here—it's the whole design.", body: "Camera frames, detections, selected behavior, and progress history are not uploaded. Detection runs on this iPhone, even without an internet connection. In a moment Awaira will ask for the camera, so you can watch detection work before you decide anything.")
+        .init(symbol: "lock.shield.fill", accent: .blue, title: "Everything stays on your iPhone.", body: "Camera frames, detections, selected behavior, and progress history are not uploaded. Detection runs on this iPhone, even without an internet connection. In a moment Awaira will ask for the camera, so you can watch detection work before you decide anything.")
     ]
     let questions: [OnboardingQuestion] = [
-        .init(key: "behaviors", title: "What would you like to notice?", helper: "Awaira notices hand-to-face motion, not a behaviour or diagnosis.", footer: nil, options: ["Movement toward hair", "Movement toward nails", "Movement toward face or skin", "General hand-to-face awareness"], multiple: true, accent: .indigo),
+        .init(key: "behaviors", title: "What would you like to notice?", helper: "Awaira notices hand to face motion, not a behaviour or diagnosis.", footer: nil, options: ["Movement toward hair", "Movement toward nails", "Movement toward face or skin", "General hand to face awareness"], multiple: true, accent: .indigo),
         .init(key: "frequencyEstimate", title: "What's your best guess?", helper: "How many times a day does this roughly happen? Don't overthink it.", footer: nil, options: ["A few times", "Around 10–30", "Around 30–100", "More than 100", "I honestly don't know"], multiple: false, accent: .mint),
-        .init(key: "contexts", title: "When does it happen most?", helper: "We'll use this to show when you're most vulnerable to automatic habits.", footer: nil, options: ["Working on computer", "During meetings", "While coding", "While thinking", "Studying", "Watching videos", "Reading", "Gaming", "During stress", "During boredom"], multiple: true, accent: .orange),
+        .init(key: "contexts", title: "When does it happen most?", helper: "We'll use this to show when it happens most.", footer: nil, options: ["Working on computer", "During meetings", "While coding", "While thinking", "Studying", "Watching videos", "Reading", "Gaming", "During stress", "During boredom"], multiple: true, accent: .orange),
         .init(key: "goal", title: "What would feel useful?", helper: "", footer: nil, options: ["Notice patterns", "Take a pause", "Choose a cue", "Keep a private reflection"], multiple: false, accent: .purple)
     ]
     // The four checks go last before the cue picker: by then the person knows what Awaira watches

@@ -69,7 +69,7 @@ struct MobileSettingsView: View {
                             showingPremiumPaywall = true
                         } label: {
                             HStack {
-                                Label("Unlock Awaira Premium", systemImage: "sparkles")
+                                Label("Unlock Awaira Premium", systemImage: "lock.open.fill")
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .scaledFont(13, weight: .semibold)
