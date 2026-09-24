@@ -35,10 +35,12 @@ struct MobileSettingsView: View {
     @Binding var vibrateEnabled: Bool
     @Binding var voiceEnabled: Bool
     @Binding var blurEnabled: Bool
+    @ObservedObject var premiumStore: PremiumStore
 
     @AppStorage("mobileAppearance") private var appearance = MobileAppearance.dark.rawValue
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingDataDeletion = false
+    @State private var showingPremiumPaywall = false
 
     /// What the theme row shows on its right-hand side, falling back to System for a value the app
     /// no longer recognises.
@@ -55,6 +57,35 @@ struct MobileSettingsView: View {
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+
+                Section {
+                    if premiumStore.isPremiumUnlocked {
+                        LabeledContent("Awaira Premium") {
+                            Label("Active", systemImage: "checkmark.seal.fill")
+                                .foregroundStyle(AwairaPalette.live)
+                        }
+                    } else {
+                        Button {
+                            showingPremiumPaywall = true
+                        } label: {
+                            HStack {
+                                Label("Unlock Awaira Premium", systemImage: "lock.open.fill")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .scaledFont(13, weight: .semibold)
+                                    .foregroundStyle(AwairaPalette.ink.opacity(0.36))
+                            }
+                        }
+                        .accessibilityIdentifier("openPremiumPaywall")
+                    }
+                } header: {
+                    Text("Premium")
+                } footer: {
+                    Text(premiumStore.isPremiumUnlocked
+                         ? "Premium is active on this Apple Account."
+                         : "Choose monthly, yearly, or a one-time Lifetime Unlock.")
+                }
+                .listRowBackground(AwairaPalette.statsSurface)
 
                 Section {
                     // A `Menu` wrapping the picker rather than `.pickerStyle(.menu)` on it: the
@@ -162,6 +193,9 @@ struct MobileSettingsView: View {
         } message: {
             Text("This permanently removes Awaira data stored on this iPhone. It cannot be undone.")
         }
+        .sheet(isPresented: $showingPremiumPaywall) {
+            PremiumPaywallView(store: premiumStore)
+        }
     }
 
     private func deleteLocalData() {
@@ -174,7 +208,7 @@ struct MobileSettingsView: View {
 
 }
 
-private enum MobileLegal {
+enum MobileLegal {
     static let privacy = URL(string: "https://awaira.app/privacy")!
     static let terms = URL(string: "https://awaira.app/terms")!
 }

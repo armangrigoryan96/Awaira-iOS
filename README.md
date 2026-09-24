@@ -1,7 +1,7 @@
 # Awaira for iPhone
 
 Awaira is an on-device awareness tool for hair pulling, nail biting, skin picking, and general
-face touching. It uses the front camera to detect hand-to-face movements and presents gentle cues
+face touching. It uses the front camera to detect hand to face movements and presents gentle cues
 that help people notice the moment before an automatic habit continues.
 
 Camera frames are analyzed on the iPhone and discarded after analysis. They are never uploaded.

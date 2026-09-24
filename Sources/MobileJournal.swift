@@ -58,7 +58,7 @@ struct MobileJournalView: View {
 
     var body: some View {
         MobilePage(title: "Journal",
-                   subtitle: "A private place to notice what matters.",
+                   subtitle: "Private notes about your day.",
                    accessory: AnyView(MobileBrandRow { composeButton })) {
             reflectionPrompt
             privacyNote
@@ -122,7 +122,7 @@ struct MobileJournalView: View {
             MobileEyebrow(text: "RECENT REFLECTIONS")
                 .padding(.top, 7)
             if groups.isEmpty {
-                MobileEmptyNote(text: "Your private moments will appear here when you choose to capture them.",
+                MobileEmptyNote(text: "Your entries will appear here.",
                                 symbol: "square.and.pencil")
                     .awairaCard(padding: 18)
             } else {

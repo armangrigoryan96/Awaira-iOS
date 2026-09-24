@@ -11,7 +11,7 @@ struct MobileInsightsView: View {
 
     var body: some View {
         MobilePage(title: "Patterns",
-                   subtitle: "Your week, brought into focus.",
+                   subtitle: "Your week at a glance.",
                    titleSize: 32,
                    accessory: AnyView(brandRow)) {
             MobileSegmented(options: PatternRange.allCases, selection: $range, label: \.title, compact: true)
@@ -257,7 +257,7 @@ struct MobileInsightsView: View {
     }
 
     private var rhythmNote: String {
-        guard let peak = peakHour else { return "As your days fill in, this curve will show when activity tends to gather." }
+        guard let peak = peakHour else { return "After a few days of tracking, this chart will show your busiest hours." }
         return "Activity peaks around \(Self.hourText(peak))."
     }
 

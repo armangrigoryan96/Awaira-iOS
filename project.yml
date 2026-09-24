@@ -16,7 +16,7 @@ targets:
       properties:
         CFBundleName: Awaira
         CFBundleDisplayName: Awaira
-        CFBundleShortVersionString: "1.1"
+        CFBundleShortVersionString: "1.2"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
@@ -25,14 +25,19 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: "Awaira uses the camera to notice when your hand reaches your face. Video is processed entirely on-device and never leaves your iPhone."
+        # These must match the subscription products and non-consumable Lifetime Unlock configured
+        # in App Store Connect for com.awaira.ios. StoreKit retrieves localised prices from them.
+        AwairaMonthlyProductID: com.awaira.ios.sub.monthly
+        AwairaYearlyProductID: com.awaira.ios.sub.yearly
+        AwairaLifetimeProductID: com.awaira.app.lifetime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.awaira.ios
         # Sources/Assets.xcassets — the app icon, taken from the Mac app so the two look like one
         # product (../awaira/frontend/Sources/Assets.xcassets).
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "6"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "8"
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"

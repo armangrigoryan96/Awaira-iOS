@@ -34,9 +34,9 @@ struct DimOverlay: View {
     }
 
     private static let cheers = [
-        "Hand down — you noticed.",
+        "Hand down. You noticed.",
         "Take a breath.",
-        "You caught it. That's the work.",
+        "You caught it.",
         "Let your hand rest.",
         "Nice catch.",
         "Back to what you were doing.",

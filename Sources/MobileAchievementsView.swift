@@ -12,7 +12,7 @@ struct MobileAchievementsView: View {
 
     var body: some View {
         MobilePage(title: "Badges",
-                   subtitle: "A private record of awareness and progress — never a leaderboard.",
+                   subtitle: "Your badges and progress. Only you can see them.",
                    accessory: AnyView(brandRow)) {
             ForEach(MobileAchievementDifficulty.allCases) { difficulty in
                 collection(for: difficulty)

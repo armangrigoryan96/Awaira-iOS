@@ -11,6 +11,7 @@ struct ContentView: View {
     @ObservedObject var detector: Detector
     @StateObject private var settings = AppSettings()
     @StateObject private var journal = JournalStore()
+    @StateObject private var premiumStore = PremiumStore()
     /// Detection is the app's primary job, so a completed onboarding starts it immediately.
     /// The header control remains a pause/resume switch for the rare times someone wants it off.
     @State private var cameraRequested = !ProcessInfo.processInfo.arguments.contains("-UITest")
@@ -18,10 +19,12 @@ struct ContentView: View {
     // launch behavior. This keeps the public-site exports tied to the native SwiftUI screens.
     @State private var selectedTab: MobileAppTab = Self.launchTab
     @State private var showingSettings = false
+    @State private var showingPremiumPaywall = ProcessInfo.processInfo.arguments.contains("-ScreenshotPaywall")
     @State private var showingContext = false
     @State private var selectedContext: String?
     @State private var contextNote = ""
     @State private var addingNote = false
+    @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
     @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
@@ -31,6 +34,52 @@ struct ContentView: View {
     @AppStorage("mobileAppearance") private var appearance = MobileAppearance.dark.rawValue
 
     var body: some View {
+        Group {
+            if allowsPreviewAccess || premiumStore.isPremiumUnlocked {
+                appShell
+            } else {
+                PremiumAccessGate(store: premiumStore)
+            }
+        }
+        .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
+        .task { await premiumStore.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await premiumStore.refresh() } }
+        }
+        .onChange(of: premiumStore.isPremiumUnlocked) { _, unlocked in
+            unlocked ? activatePremiumCapture() : deactivatePremiumCapture()
+        }
+        .sheet(isPresented: $showingSettings) {
+            MobileSettingsView(detector: detector, settings: settings, journal: journal,
+                               vibrateEnabled: $vibrateEnabled, voiceEnabled: $voiceEnabled,
+                               blurEnabled: $blurEnabled, premiumStore: premiumStore)
+        }
+        .sheet(isPresented: $showingPremiumPaywall) {
+            PremiumPaywallView(store: premiumStore)
+        }
+        .sheet(isPresented: $showingContext) { contextPrompt }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            applyTiming()
+            applyAlerts()
+            if premiumStore.isPremiumUnlocked {
+                activatePremiumCapture()
+            } else {
+                // Onboarding may have already created the camera session. Never leave capture
+                // running behind the required purchase screen.
+                deactivatePremiumCapture()
+            }
+        }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    private var allowsPreviewAccess: Bool {
+        // Automated screenshots must be able to show ordinary product screens, but production
+        // launches always go through the entitlement gate.
+        ProcessInfo.processInfo.arguments.contains("-UITest")
+    }
+
+    private var appShell: some View {
         ZStack {
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -41,19 +90,6 @@ struct ContentView: View {
 
             DimOverlay(active: blurEnabled && detector.touchLevel >= 3)
             TouchBorder(level: detector.touchLevel)
-        }
-        .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
-        .sheet(isPresented: $showingSettings) {
-            MobileSettingsView(detector: detector, settings: settings, journal: journal,
-                               vibrateEnabled: $vibrateEnabled, voiceEnabled: $voiceEnabled,
-                               blurEnabled: $blurEnabled)
-        }
-        .sheet(isPresented: $showingContext) { contextPrompt }
-        .onAppear {
-            UIApplication.shared.isIdleTimerDisabled = true
-            applyTiming()
-            applyAlerts()
-            if !isUITest { detector.start() }
         }
         .onChange(of: settings.buzzAfter) { _, _ in applyTiming() }
         .onChange(of: vibrateEnabled) { _, _ in applyAlerts() }
@@ -67,7 +103,17 @@ struct ContentView: View {
                 selectedContext = nil; contextNote = ""; addingNote = false; showingContext = true
             }
         }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    private func activatePremiumCapture() {
+        guard !isUITest else { return }
+        if detector.isPaused { detector.togglePause() }
+        detector.start()
+    }
+
+    private func deactivatePremiumCapture() {
+        guard !isUITest, !detector.isPaused else { return }
+        detector.togglePause()
     }
 
     @ViewBuilder private var tabContent: some View {

@@ -5,9 +5,8 @@ import UIKit
 /// The five detection checks, the phone's version of the desktop app's `DetectionCheckStep.swift`.
 ///
 /// They sit at the end of onboarding, just before the cue picker: see yourself found, make the
-/// movement on purpose and watch it register, feel and hear the alert, hold the hand there for the
-/// second and longer cue, then a summary. Choosing a cue is a blind choice otherwise — nobody has
-/// yet seen a hand-to-face movement register.
+/// movement on purpose and watch it register, feel and hear the alert, then a summary. Choosing a
+/// cue is a blind choice otherwise — nobody has yet seen a hand to face movement register.
 ///
 /// This is the one place the camera is shown back. Nothing these screens see is recorded: the
 /// detector runs in `calibrating` mode for the whole of the rest of onboarding, so a rehearsed
@@ -125,7 +124,7 @@ struct MobileDetectionCheckView: View {
     private var title: String {
         switch page {
         case .camera:   return "Let's test detection"
-        case .movement: return "Try a hand-to-face movement"
+        case .movement: return "Try a hand to face movement"
         case .alert:    return "Test the alert"
         case .linger:   return "Now hold your hand there"
         case .summary:  return "You're ready!"
@@ -135,13 +134,11 @@ struct MobileDetectionCheckView: View {
     private var subtitle: String {
         switch page {
         case .camera:
-            return "Awaira watches for hand movements towards your face — chin, mouth, hair, nose. This takes a few seconds."
+            return "Awaira watches for hand movements towards your chin, mouth, hair, or nose. This takes a few seconds."
         case .movement:
-            return "Now move your hand towards your face — touch your chin or mouth, for example. Awaira should detect it."
+            return "Now move your hand towards your face, for example to your chin or mouth. Awaira should detect it."
         case .alert:
-            return "When a hand-to-face movement is detected, Awaira can nudge you with a short sound and a buzz."
-        case .linger:
-            return "That short cue fires the moment your hand arrives. If it stays, a soft tone and a steady buzz come in instead, and keep going until you lower your hand."
+            return "When a hand to face movement is detected, Awaira can nudge you with a short sound and a buzz."
         case .summary:
             return "Here's what's working. Next, pick the cues you want Awaira to use."
         }
@@ -197,7 +194,7 @@ struct MobileDetectionCheckView: View {
             .offset(x: rect.minX, y: rect.minY)
 
         if caught {
-            Label("Hand-to-face detected", systemImage: "exclamationmark.circle.fill")
+            Label("Hand to face detected", systemImage: "exclamationmark.circle.fill")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 9)
@@ -232,8 +229,7 @@ struct MobileDetectionCheckView: View {
 
     private var bubble: some View {
         VStack {
-            Label(sustainedByHand ? "Still with you 💙" : "Hey, keep going 💙",
-                  systemImage: "speaker.wave.2.fill")
+            Label("Keep going", systemImage: "speaker.wave.2.fill")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.black)
                 .padding(.horizontal, 14)
@@ -434,7 +430,7 @@ struct MobileDetectionCheckView: View {
                 Text(title)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(passed ? .primary : .secondary)
-                Text(passed ? done : "Not tested — you can continue anyway")
+                Text(passed ? done : "Not tested. You can continue anyway.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
