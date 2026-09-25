@@ -29,6 +29,7 @@ struct PremiumPaywallView: View {
 
     private var purchaseButtonTitle: String {
         if store.isPremiumUnlocked { return "Premium is active" }
+        if selectedPlan.isFreeTrial { return "Start 7-day free trial" }
         if store.state == .purchasing { return "Purchasing…" }
         if let trial = store.freeTrialDescription(for: selectedPlan.id) { return "Start \(trial)" }
         if let price = displayedPrice(for: selectedPlan) { return "Continue for \(price)" }
@@ -109,16 +110,29 @@ struct PremiumPaywallView: View {
     private var planChoices: some View {
         VStack(spacing: 10) {
             ForEach(PremiumPlan.all) { plan in
-                Button {
-                    selectedPlanID = plan.id
-                } label: {
+                if plan.isFreeTrial {
                     PlanChoice(plan: plan,
                                price: displayedPrice(for: plan),
                                detail: detail(for: plan),
-                               isSelected: selectedPlanID == plan.id)
+                               isSelected: selectedPlanID == plan.id,
+                               canStartFreeTrial: store.freeTrialStartedAt == nil,
+                               onStartFreeTrial: { store.startFreeTrial() })
+                        .onTapGesture { selectedPlanID = plan.id }
+                        .accessibilityIdentifier("premiumPlan.\(plan.id)")
+                } else {
+                    Button {
+                        selectedPlanID = plan.id
+                    } label: {
+                        PlanChoice(plan: plan,
+                                   price: displayedPrice(for: plan),
+                                   detail: detail(for: plan),
+                                   isSelected: selectedPlanID == plan.id,
+                                   canStartFreeTrial: false,
+                                   onStartFreeTrial: nil)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("premiumPlan.\(plan.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("premiumPlan.\(plan.id)")
             }
         }
     }
@@ -131,6 +145,8 @@ struct PremiumPaywallView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(AwairaPalette.live.opacity(0.13), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else if selectedPlan.isFreeTrial {
+            EmptyView()
         } else {
             Button {
                 Task { await store.purchase(productID: selectedPlan.id) }
@@ -205,7 +221,8 @@ struct PremiumPaywallView: View {
     }
 
     private func displayedPrice(for plan: PremiumPlan) -> String? {
-        store.product(for: plan.id)?.displayPrice ?? (isScreenshotDemo ? plan.reviewPrice : nil)
+        if plan.isFreeTrial { return plan.reviewPrice }
+        return store.product(for: plan.id)?.displayPrice ?? (isScreenshotDemo ? plan.reviewPrice : nil)
     }
 
     private var legalDisclosure: String {
@@ -222,20 +239,29 @@ private struct PremiumPlan: Identifiable {
     let period: String
     let badge: String?
     let features: [String]
+    let isFreeTrial: Bool
 
+    static let free = PremiumPlan(id: "free-trial",
+                                  title: "Free Trial", detail: "7 days of full access · No card needed",
+                                  reviewPrice: "Free", period: "for 7 days", badge: nil,
+                                  features: ["Full access for 7 days", "No credit card", "No account needed"],
+                                  isFreeTrial: true)
     static let monthly = PremiumPlan(id: PremiumStore.monthlyProductID,
                                      title: "Monthly", detail: "Flexible monthly access",
                                      reviewPrice: "$9.99", period: "per month", badge: nil,
-                                     features: ["Hand-to-face awareness", "Personal insights and journal", "Cancel anytime"])
+                                     features: ["Hand-to-face awareness", "Personal insights and journal", "Cancel anytime"],
+                                     isFreeTrial: false)
     static let yearly = PremiumPlan(id: PremiumStore.yearlyProductID,
                                     title: "Yearly", detail: "Best price for a full year",
                                     reviewPrice: "$24.99", period: "per year", badge: "BEST VALUE",
-                                    features: ["Everything in Monthly", "Full awareness insights and patterns", "Best value for long-term progress"])
+                                    features: ["Everything in Monthly", "Full awareness insights and patterns", "Best value for long-term progress"],
+                                    isFreeTrial: false)
     static let lifetime = PremiumPlan(id: PremiumStore.lifetimeProductID,
                                       title: "Lifetime Unlock", detail: "Pay once. Keep Premium forever.",
                                       reviewPrice: "$49.99", period: "one-time purchase", badge: nil,
-                                      features: ["Everything in Yearly", "All future Premium updates", "One payment, ongoing access"])
-    static let all = [monthly, yearly, lifetime]
+                                      features: ["Everything in Yearly", "All future Premium updates", "One payment, ongoing access"],
+                                      isFreeTrial: false)
+    static let all = [free, monthly, yearly, lifetime]
 }
 
 private struct PlanChoice: View {
@@ -243,6 +269,8 @@ private struct PlanChoice: View {
     let price: String?
     let detail: String
     let isSelected: Bool
+    let canStartFreeTrial: Bool
+    let onStartFreeTrial: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -296,6 +324,21 @@ private struct PlanChoice: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if plan.isFreeTrial, let onStartFreeTrial {
+                Button(action: onStartFreeTrial) {
+                    Text(canStartFreeTrial ? "Start free trial" : "Free trial already used")
+                        .scaledFont(13, weight: .semibold)
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+                .background(AwairaPalette.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .disabled(!canStartFreeTrial)
+                .opacity(canStartFreeTrial ? 1 : 0.5)
+                .accessibilityIdentifier("premiumFreeTrialButton")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(16)

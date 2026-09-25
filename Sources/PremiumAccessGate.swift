@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The production access boundary. A completed Apple subscription trial, active subscription, or
-/// Lifetime Unlock is required to enter Awaira's tracking surfaces. There is no device-local trial
-/// that can be reset by reinstalling the app.
+/// The production access boundary. A seven-day free trial, completed Apple subscription trial,
+/// active subscription, or Lifetime Unlock is required to enter Awaira's tracking surfaces.
 struct PremiumAccessGate: View {
     @ObservedObject var store: PremiumStore
 
