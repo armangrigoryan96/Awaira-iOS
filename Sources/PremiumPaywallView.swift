@@ -45,13 +45,6 @@ struct PremiumPaywallView: View {
                     planChoices
                         .padding(.top, 24)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        PremiumBenefit(icon: "checkmark.circle.fill", text: "Full awareness insights and patterns")
-                        PremiumBenefit(icon: "checkmark.circle.fill", text: "Your complete private journal history")
-                        PremiumBenefit(icon: "checkmark.circle.fill", text: "All future Premium updates")
-                    }
-                    .padding(.top, 20)
-
                     purchaseControls
                         .padding(.top, 24)
 
@@ -93,21 +86,24 @@ struct PremiumPaywallView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(spacing: 10) {
             Image(systemName: "lock.open.fill")
-                .font(.system(size: 28, weight: .semibold))
+                .font(.system(size: 25, weight: .semibold))
                 .foregroundStyle(AwairaPalette.accent)
-                .frame(width: 52, height: 52)
-                .background(AwairaPalette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(width: 48, height: 48)
+                .background(AwairaPalette.accent.opacity(0.14), in: Circle())
 
             Text("Unlock Awaira Premium")
-                .awairaDisplay(29)
+                .scaledFont(26, weight: .bold)
                 .foregroundStyle(AwairaPalette.text)
+                .multilineTextAlignment(.center)
             Text("Get every Premium feature, including future updates.")
-                .awairaCaption(15)
+                .awairaCaption(13)
                 .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var planChoices: some View {
@@ -225,16 +221,20 @@ private struct PremiumPlan: Identifiable {
     let reviewPrice: String
     let period: String
     let badge: String?
+    let features: [String]
 
     static let monthly = PremiumPlan(id: PremiumStore.monthlyProductID,
                                      title: "Monthly", detail: "Flexible monthly access",
-                                     reviewPrice: "$9.99", period: "per month", badge: nil)
+                                     reviewPrice: "$9.99", period: "per month", badge: nil,
+                                     features: ["Hand-to-face awareness", "Personal insights and journal", "Cancel anytime"])
     static let yearly = PremiumPlan(id: PremiumStore.yearlyProductID,
                                     title: "Yearly", detail: "Best price for a full year",
-                                    reviewPrice: "$24.99", period: "per year", badge: "BEST VALUE")
+                                    reviewPrice: "$24.99", period: "per year", badge: "BEST VALUE",
+                                    features: ["Everything in Monthly", "Full awareness insights and patterns", "Best value for long-term progress"])
     static let lifetime = PremiumPlan(id: PremiumStore.lifetimeProductID,
                                       title: "Lifetime Unlock", detail: "Pay once. Keep Premium forever.",
-                                      reviewPrice: "$49.99", period: "one-time purchase", badge: nil)
+                                      reviewPrice: "$49.99", period: "one-time purchase", badge: nil,
+                                      features: ["Everything in Yearly", "All future Premium updates", "One payment, ongoing access"])
     static let all = [monthly, yearly, lifetime]
 }
 
@@ -245,68 +245,77 @@ private struct PlanChoice: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                .scaledFont(21)
-                .foregroundStyle(isSelected ? AwairaPalette.accent : AwairaPalette.ink.opacity(0.35))
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text(plan.title)
-                        .awairaCardTitle(17)
-                        .foregroundStyle(AwairaPalette.text)
-                    if let badge = plan.badge {
-                        Text(badge)
-                            .awairaEyebrow(9, tracking: 0.8)
-                            .foregroundStyle(AwairaPalette.accent)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 4)
-                            .background(AwairaPalette.accent.opacity(0.12), in: Capsule())
-                    }
-                }
-                Text(detail)
-                    .awairaCaption(13)
-                    .foregroundStyle(AwairaPalette.ink.opacity(0.58))
+        VStack(spacing: 12) {
+            if let badge = plan.badge {
+                Text(badge)
+                    .awairaEyebrow(10, tracking: 0.9)
+                    .foregroundStyle(AwairaPalette.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(AwairaPalette.accent.opacity(0.18), in: Capsule())
             }
 
-            Spacer(minLength: 8)
+            Text(plan.title)
+                .awairaCardTitle(17)
+                .foregroundStyle(AwairaPalette.text)
 
-            VStack(alignment: .trailing, spacing: 3) {
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
                 if let price {
                     Text(price)
-                        .awairaCardTitle(18)
+                        .awairaFigure(25, weight: .semibold)
                         .foregroundStyle(AwairaPalette.text)
-                    Text(plan.period)
-                        .awairaCaption(11)
-                        .foregroundStyle(AwairaPalette.ink.opacity(0.50))
                 } else {
-                    ProgressView().tint(AwairaPalette.accent)
+                    ProgressView()
+                        .tint(AwairaPalette.accent)
+                }
+                Text(plan.period)
+                    .awairaCaption(12)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.55))
+            }
+
+            Text(detail)
+                .awairaCaption(12)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.55))
+                .multilineTextAlignment(.center)
+
+            Rectangle()
+                .fill(AwairaPalette.ink.opacity(0.08))
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(plan.features, id: \.self) { feature in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark")
+                            .scaledFont(12, weight: .semibold)
+                            .foregroundStyle(plan.badge == nil ? AwairaPalette.ink.opacity(0.55) : AwairaPalette.accent)
+                            .padding(.top, 2)
+                        Text(feature)
+                            .awairaCaption(12)
+                            .foregroundStyle(AwairaPalette.ink.opacity(0.78))
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(15)
-        .background(AwairaPalette.statsSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(isSelected ? AwairaPalette.accent.opacity(0.82) : AwairaPalette.cardBorder,
-                              lineWidth: isSelected ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(cardBorder, lineWidth: isSelected ? 1.5 : 1)
         )
         .accessibilityElement(children: .combine)
     }
-}
 
-private struct PremiumBenefit: View {
-    let icon: String
-    let text: String
+    private var cardBackground: Color {
+        if isSelected { return AwairaPalette.accent.opacity(0.12) }
+        if plan.badge != nil { return AwairaPalette.accent.opacity(0.07) }
+        return AwairaPalette.ink.opacity(0.05)
+    }
 
-    var body: some View {
-        Label {
-            Text(text)
-                .awairaCaption(15)
-                .foregroundStyle(AwairaPalette.ink.opacity(0.78))
-        } icon: {
-            Image(systemName: icon)
-                .foregroundStyle(AwairaPalette.accent)
-        }
+    private var cardBorder: Color {
+        if isSelected { return AwairaPalette.accent.opacity(0.82) }
+        if plan.badge != nil { return AwairaPalette.accent.opacity(0.6) }
+        return AwairaPalette.cardBorder
     }
 }
