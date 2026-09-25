@@ -26,6 +26,17 @@ final class PremiumStore: ObservableObject {
                                               fallback: "com.awaira.app.lifetime")
     static let productIDs = [monthlyProductID, yearlyProductID, lifetimeProductID]
 
+    // Builds 7 and 8 used different subscription identifiers. Ask StoreKit for both while the
+    // App Store Connect catalogue is transitioned, but keep the configured identifiers as the
+    // plans the UI presents. This lets an existing, saleable catalogue continue to work instead
+    // of leaving every plan unavailable after an identifier-only app update.
+    private static let legacyMonthlyProductID = "com.awaira.ios.premium.monthly"
+    private static let legacyYearlyProductID = "com.awaira.ios.premium.yearly"
+    private static let storeKitProductIDs = orderedUnique(productIDs + [
+        legacyMonthlyProductID,
+        legacyYearlyProductID,
+    ])
+
     @Published private(set) var products: [String: Product] = [:]
     /// Product IDs whose introductory free trial this Apple Account can still redeem. Apple only
     /// grants a trial once per subscription group, so an ineligible customer is charged right away.
@@ -51,7 +62,7 @@ final class PremiumStore: ObservableObject {
         // paying customer keeps access when the storefront is temporarily unavailable.
         await refreshEntitlement()
         do {
-            let fetchedProducts = try await Product.products(for: Self.productIDs)
+            let fetchedProducts = try await Product.products(for: Self.storeKitProductIDs)
             products = Dictionary(uniqueKeysWithValues: fetchedProducts.map { ($0.id, $0) })
             trialEligibleProductIDs = await Self.trialEligibleIDs(in: fetchedProducts)
             state = products.isEmpty ? .unavailable : (isPremiumUnlocked ? .purchased : .ready)
@@ -61,14 +72,15 @@ final class PremiumStore: ObservableObject {
     }
 
     func product(for id: String) -> Product? {
-        products[id]
+        products[resolvedProductID(for: id)]
     }
 
     /// A free trial is an App Store introductory offer, never an app-owned timer. Apple therefore
     /// decides eligibility and issues the entitlement as soon as the customer accepts the offer.
     func freeTrialDescription(for productID: String) -> String? {
-        guard trialEligibleProductIDs.contains(productID),
-              let offer = products[productID]?.subscription?.introductoryOffer,
+        let resolvedID = resolvedProductID(for: productID)
+        guard trialEligibleProductIDs.contains(resolvedID),
+              let offer = products[resolvedID]?.subscription?.introductoryOffer,
               offer.paymentMode == .freeTrial else { return nil }
 
         let count = offer.period.value
@@ -85,13 +97,13 @@ final class PremiumStore: ObservableObject {
 
     /// The yearly price spread over twelve months, in the customer's own storefront currency.
     func monthlyEquivalentPrice(for productID: String) -> String? {
-        guard let product = products[productID],
+        guard let product = product(for: productID),
               product.subscription?.subscriptionPeriod == .yearly else { return nil }
         return (product.price / 12).formatted(product.priceFormatStyle)
     }
 
     func purchase(productID: String) async {
-        guard let product = products[productID] else {
+        guard let product = product(for: productID) else {
             await refresh()
             return
         }
@@ -130,7 +142,7 @@ final class PremiumStore: ObservableObject {
             for await result in Transaction.updates {
                 guard let self else { return }
                 guard let transaction = try? self.verified(result) else { continue }
-                guard Self.productIDs.contains(transaction.productID) else { continue }
+                guard Self.storeKitProductIDs.contains(transaction.productID) else { continue }
                 await transaction.finish()
                 await self.refreshEntitlement()
                 self.state = self.isPremiumUnlocked ? .purchased : .ready
@@ -142,7 +154,7 @@ final class PremiumStore: ObservableObject {
         var unlocked = false
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? verified(result) else { continue }
-            if Self.productIDs.contains(transaction.productID) {
+            if Self.storeKitProductIDs.contains(transaction.productID) {
                 unlocked = true
                 break
             }
@@ -171,6 +183,26 @@ final class PremiumStore: ObservableObject {
 
     private static func productID(for infoKey: String, fallback: String) -> String {
         (Bundle.main.object(forInfoDictionaryKey: infoKey) as? String) ?? fallback
+    }
+
+    private func resolvedProductID(for requestedID: String) -> String {
+        guard products[requestedID] == nil else { return requestedID }
+
+        switch requestedID {
+        case Self.monthlyProductID:
+            return products[Self.legacyMonthlyProductID] == nil
+                ? requestedID : Self.legacyMonthlyProductID
+        case Self.yearlyProductID:
+            return products[Self.legacyYearlyProductID] == nil
+                ? requestedID : Self.legacyYearlyProductID
+        default:
+            return requestedID
+        }
+    }
+
+    private static func orderedUnique(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        return ids.filter { seen.insert($0).inserted }
     }
 }
 

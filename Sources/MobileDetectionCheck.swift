@@ -139,6 +139,8 @@ struct MobileDetectionCheckView: View {
             return "Now move your hand towards your face, for example to your chin or mouth. Awaira should detect it."
         case .alert:
             return "When a hand to face movement is detected, Awaira can nudge you with a short sound and a buzz."
+        case .linger:
+            return "Keep your hand near your face for a moment so Awaira can recognise a sustained movement."
         case .summary:
             return "Here's what's working. Next, pick the cues you want Awaira to use."
         }
