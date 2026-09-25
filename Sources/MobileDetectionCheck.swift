@@ -49,28 +49,35 @@ struct MobileDetectionCheckView: View {
     @State private var sustainedPreviewTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        // The desktop's order, because it is the one that reads: what this screen is, the picture,
+        // the control that rehearses it, then the hint that explains what to look for.
+        VStack(spacing: 18) {
             header
 
             if page == .summary {
                 summaryCard
             } else {
                 preview
-                hintCard
             }
 
             if page == .alert  { hearItButton }
             if page == .linger { lingerControls }
 
+            if page != .summary { hintCard }
+
             if page == .camera {
-                Button("Skip", action: onSkip)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 2)
+                Button(action: onSkip) {
+                    Text("Skip")
+                        .scaledFont(13)
+                        .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.5))
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
         }
-        .padding(.top, 24)
+        .padding(.top, 20)
+        .padding(.horizontal, 24)
         // Each step is its own view, so `onChange` never reports state that was already true when
         // this one was built — a face found during a step transition would otherwise leave the
         // summary claiming the camera was never tested.
@@ -105,20 +112,25 @@ struct MobileDetectionCheckView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 10) {
             Text("\(page.number) / 5")
-                .font(.caption.weight(.semibold))
+                .scaledFont(12, weight: .semibold)
                 .foregroundStyle(accent)
 
             Text(title)
-                .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+                .scaledFont(27, weight: .bold, design: .rounded)
+                .foregroundStyle(AwairaPalette.onboardingBlue)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(subtitle)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
+                .scaledFont(15)
+                .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: 480)
     }
 
     private var title: String {
@@ -140,7 +152,7 @@ struct MobileDetectionCheckView: View {
         case .alert:
             return "When a hand to face movement is detected, Awaira can nudge you with a short sound and a buzz."
         case .linger:
-            return "Keep your hand near your face for a moment so Awaira can recognise a sustained movement."
+            return "The short alert fires the moment your hand arrives. If it stays, a soft tone and a steady buzz fade in and keep going until you lower your hand."
         case .summary:
             return "Here's what's working. Next, pick the cues you want Awaira to use."
         }
@@ -150,15 +162,17 @@ struct MobileDetectionCheckView: View {
 
     private var preview: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.black)
-
             if let error = detector.errorText {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.black)
                 deniedCard(error)
             } else {
                 GeometryReader { geo in
                     ZStack(alignment: .topLeading) {
-                        CameraPreviewView(session: detector.session)
+                        // The picture itself is drawn behind this tile by `IPhoneOnboardingView`,
+                        // which owns the one preview layer of the flow. What stays here is
+                        // everything that has to sit on top of it.
+                        Color.clear
 
                         if let zone = detector.zone,
                            let rect = PreviewGeometry.rect(zone: zone,
@@ -178,6 +192,8 @@ struct MobileDetectionCheckView: View {
         .aspectRatio(detector.bufferAspect, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: 340)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        // Hand the tile's place to the container, which draws the camera there.
+        .anchorPreference(key: CameraSlotKey.self, value: .bounds) { [page.rawValue: $0] }
     }
 
     /// The box around the head, and the flag that marks a caught movement.
@@ -288,35 +304,56 @@ struct MobileDetectionCheckView: View {
                     "You should hear a short sound and feel a buzz the moment the movement is detected. You can pick which cues to use on the next screen, and change them anytime in Settings.")
         }
         return HStack(alignment: .top, spacing: 14) {
-            Image(systemName: hint.symbol)
-                .font(.title3)
-                .foregroundStyle(accent)
-                .frame(width: 38, height: 38)
-                .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 5) {
-                Text(hint.title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                Text(hint.body).font(.footnote).foregroundStyle(.secondary).lineSpacing(2)
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(accent.opacity(0.14))
+                Image(systemName: hint.symbol)
+                    .scaledFont(18)
+                    .foregroundStyle(accent)
             }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(hint.title)
+                    .scaledFont(15, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.onboardingInk)
+                Text(hint.body)
+                    .scaledFont(13)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.55))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
+        .frame(maxWidth: 480)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AwairaPalette.onboardingInk.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AwairaPalette.onboardingInk.opacity(0.1), lineWidth: 1.5)
+        )
     }
 
     // MARK: Alert
 
     private var hearItButton: some View {
         Button(action: fireAlert) {
-            Label("Try it", systemImage: "play.fill")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(accent)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(accent.opacity(0.14), in: Capsule())
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill")
+                    .scaledFont(10, weight: .semibold)
+                Text("Try it")
+                    .scaledFont(13, weight: .semibold)
+            }
+            .foregroundStyle(accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(accent.opacity(0.15), in: Capsule())
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
     }
 
     /// Fired from the check itself rather than left to the detector: the cues are off while the
@@ -346,24 +383,29 @@ struct MobileDetectionCheckView: View {
                 if sustainedPreviewTask != nil || sustainedByHand { stopSustained() }
                 else { startSustainedPreview() }
             } label: {
-                Label(sustainedPreviewTask != nil || sustainedByHand ? "Stop" : "Try it",
-                      systemImage: sustainedPreviewTask != nil || sustainedByHand ? "stop.fill" : "play.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(accent.opacity(0.14), in: Capsule())
+                let running = sustainedPreviewTask != nil || sustainedByHand
+                HStack(spacing: 6) {
+                    Image(systemName: running ? "stop.fill" : "play.fill")
+                        .scaledFont(10, weight: .semibold)
+                    Text(running ? "Stop" : "Try it")
+                        .scaledFont(13, weight: .semibold)
+                }
+                .foregroundStyle(accent)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(accent.opacity(0.15), in: Capsule())
             }
             .buttonStyle(.plain)
 
             Text(sustainedByHand
                  ? "That's it — lower your hand and it stops."
                  : "Hold your hand at your face and give it a few seconds.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .scaledFont(12)
+                .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.48))
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 480)
     }
 
     /// Both sustained cues at once, because that is what the app does at level 3. They are started
@@ -408,16 +450,24 @@ struct MobileDetectionCheckView: View {
     private var summaryCard: some View {
         VStack(spacing: 0) {
             summaryRow("Camera detection", done: "Working correctly", passed: state.sawFace)
-            Divider().padding(.leading, 38)
+            Divider().overlay(AwairaPalette.onboardingInk.opacity(0.08))
             summaryRow("Alert", done: "Playing correctly", passed: state.playedAlert)
-            Divider().padding(.leading, 38)
+            Divider().overlay(AwairaPalette.onboardingInk.opacity(0.08))
             summaryRow("Lingering cue", done: "Holding while your hand stays", passed: state.heardSustained)
-            Divider().padding(.leading, 38)
+            Divider().overlay(AwairaPalette.onboardingInk.opacity(0.08))
             summaryRow("Tracking", done: "Ready to log your progress", passed: state.sawTouch)
         }
-        .padding(.horizontal, 16)
-        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 4)
+        .frame(maxWidth: 480)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AwairaPalette.onboardingInk.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AwairaPalette.onboardingInk.opacity(0.1), lineWidth: 1.5)
+        )
     }
 
     /// A check that was not performed stays grey and says so — nothing here blocks continuing, since
@@ -425,16 +475,17 @@ struct MobileDetectionCheckView: View {
     private func summaryRow(_ title: String, done: String, passed: Bool) -> some View {
         HStack(spacing: 14) {
             Image(systemName: passed ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundStyle(passed ? .green : .secondary)
-                .frame(width: 24)
+                .scaledFont(22)
+                .foregroundStyle(passed ? Color(red: 0.24, green: 0.72, blue: 0.45)
+                                        : AwairaPalette.onboardingInk.opacity(0.25))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(passed ? .primary : .secondary)
-                Text(passed ? done : "Not tested. You can continue anyway.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .scaledFont(15, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(passed ? 1 : 0.55))
+                Text(passed ? done : "Not tested — you can continue anyway")
+                    .scaledFont(12)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.48))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -444,7 +495,27 @@ struct MobileDetectionCheckView: View {
 
 // MARK: - Camera preview
 
-/// The live camera, for the five checks and nowhere else in the app.
+/// Where the check currently on screen wants the camera drawn, keyed by `MobileDetectionCheckPage`.
+///
+/// The preview does not live in the step. A layer per step froze the app on the very first step
+/// change: the steps animate, so for 0.35 s the outgoing check was still on screen while the
+/// incoming one was already built, and two preview layers claimed the same session at once —
+/// attaching the second one blocks the main thread inside AVFoundation until the capture queue,
+/// busy with a Vision pass on every frame, lets the session reconfigure. Handing the same view from
+/// step to step instead fixed the freeze but drew black, because a preview layer that changes
+/// superview stops rendering. So the container keeps one preview for the whole flow and each step
+/// only reports the rectangle it should fill.
+struct CameraSlotKey: PreferenceKey {
+    static let defaultValue: [Int: Anchor<CGRect>] = [:]
+
+    static func reduce(value: inout [Int: Anchor<CGRect>],
+                       nextValue: () -> [Int: Anchor<CGRect>]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+/// The live camera, for the five checks and nowhere else in the app. Built once by
+/// `IPhoneOnboardingView` and positioned from `CameraSlotKey`.
 ///
 /// Mirrored on purpose: the detector leaves the pixels it measures unmirrored and mirrors the
 /// coordinates it publishes instead (see `Detector.displayRect`), so the picture has to be the

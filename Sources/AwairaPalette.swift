@@ -41,6 +41,18 @@ enum AwairaPalette {
     /// The quiet slate the desktop gives a figure that is data rather than status.
     static let figure = Color(red: 138.0 / 255.0, green: 160.0 / 255.0, blue: 187.0 / 255.0)
 
+    /// The warm, optimistic blue used by the first-run experience. It is deliberately separate from
+    /// the product accent, whose higher saturation is intended for controls and data.
+    static let onboardingBlue = Color(red: 37.0 / 255.0, green: 82.0 / 255.0, blue: 151.0 / 255.0)
+
+    /// First-run text/line colour. Onboarding always paints the light paper illustration, so its
+    /// type must stay dark even on a phone set to the dark theme — which is why these three cannot
+    /// be `dynamic`, unlike everything above them.
+    static let onboardingInk = Color(red: 26.0 / 255.0, green: 34.0 / 255.0, blue: 48.0 / 255.0)
+
+    /// The light backdrop behind first-run badges, for the same reason as `onboardingInk`.
+    static let onboardingCanvas = Color(red: 244.0 / 255.0, green: 246.0 / 255.0, blue: 250.0 / 255.0)
+
     // The mobile dashboard follows the current desktop treatment: a near-black page with graphite
     // cards, rather than the older navy shell.
     static let window = dynamic(dark: rgb(14, 15, 17), light: rgb(244, 246, 250))

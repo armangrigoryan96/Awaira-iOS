@@ -1,378 +1,1085 @@
 import SwiftUI
 
-/// The iPhone version of Awaira's desktop onboarding: the same education and reflective questions,
-/// then the five detection checks, then the cue picker.
-///
-/// The checks are where the camera is first asked for — they cannot show detection working without
-/// it. Everything before them still asks for nothing, and the privacy page says so in those words.
+// The iPhone's first run, built from the desktop app's `awaira/frontend/Sources/Onboarding.swift`
+// screen for screen: the same paper backdrop, the same animated illustrations, the same copy, the
+// same questions, then the five detection checks and a cue picker.
+//
+// Three desktop steps are deliberately absent. "How did you hear about us?" reports to the server
+// on the Mac and the phone has no such call, so here it would only ask a question nobody could ever
+// read. The daily-commitment step has nothing to drive on a phone that keeps no streak. And pricing
+// does not exist here at all — the iPhone app is free, with no trial to start and nothing to sell,
+// so the flow ends on the profile screen, whose button goes straight into the app.
+
+// MARK: - Model
+
+/// One educational screen: copy + which animated illustration to show + its accent hue.
+private struct OnboardingPage: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+    let cta: String
+    let accent: Color
+    let illustration: Illustration
+
+    enum Illustration { case awareness, experience, normalTouches, privacy }
+}
+
+private let pages: [OnboardingPage] = [
+    .init(
+        title: "Notice a moment sooner.",
+        body: "Awaira notices hand to face movements while you work. It cannot tell why a movement happened or label it — it simply offers an optional moment of awareness.",
+        cta: "Show me how it works",
+        accent: Color(red: 0.49, green: 0.56, blue: 1.0),
+        illustration: .awareness
+    ),
+    .init(
+        title: "Here's what happens, step by step.",
+        body: "Reading on your phone, you reach up. Awaira notices. A gentle cue arrives — not a blocker, not an alarm. You lower your hand and carry on. That's it.",
+        cta: "I'm ready",
+        accent: Color(red: 0.38, green: 0.78, blue: 0.95),
+        illustration: .experience
+    ),
+    .init(
+        title: "A movement is just a movement.",
+        body: "Many hand to face movements are ordinary: thinking, resting your chin, scratching an itch, or adjusting glasses. A cue is only an invitation to notice — never a judgement or a health conclusion.",
+        cta: "Got it",
+        accent: Color(red: 0.95, green: 0.65, blue: 0.35),
+        illustration: .normalTouches
+    ),
+    // The desktop's privacy page, with the one sentence the phone has to add: the checks a few
+    // screens later ask iOS for the camera, and a promise made here that the flow then breaks is
+    // worse than no promise at all. What has not changed is the part that matters — nothing leaves
+    // the phone.
+    .init(
+        title: "Privacy isn't a feature here — it's the whole design.",
+        body: "Your camera is analyzed entirely on your iPhone. Camera video, camera images, detections, selected behavior, and progress history are not uploaded. Awaira even works without an internet connection — detection runs fully offline.\n\nIn a moment Awaira will ask for the camera, so you can watch detection work before you decide anything.",
+        cta: "Start protecting myself",
+        accent: Color(red: 0.42, green: 0.66, blue: 1.0),
+        illustration: .privacy
+    ),
+]
+
+// MARK: - Questions
+
+/// One onboarding question. Answers are stored in @AppStorage under `storageKey`: single-choice as
+/// the chosen option id, multi-choice as comma-joined ids — the same keys and the same stable ids
+/// the Mac writes, so the two apps record an answer identically.
+private struct Question: Identifiable {
+    let id = UUID()
+    let storageKey: String
+    let title: String
+    let helper: String
+    let footer: String?
+    let accent: Color
+    let multi: Bool
+    let options: [Option]
+
+    struct Option: Identifiable {
+        let id: String      // stable key persisted to storage (not the label)
+        let label: String
+    }
+}
+
+private let questions: [Question] = [
+    .init(
+        storageKey: "behaviors",
+        title: "What would you like to notice?",
+        helper: "Choose any movement areas that feel useful to reflect on. Awaira notices hand to face motion, not a behaviour or diagnosis.",
+        footer: nil,
+        accent: Color(red: 0.49, green: 0.56, blue: 1.0),
+        multi: true,
+        options: [
+            .init(id: "hair_pulling",  label: "Movement toward hair"),
+            .init(id: "nail_biting",   label: "Movement toward nails"),
+            .init(id: "skin_picking",  label: "Movement toward face or skin"),
+            .init(id: "face_touching", label: "General hand to face awareness"),
+        ]
+    ),
+    .init(
+        storageKey: "frequencyEstimate",
+        title: "What's your best guess?",
+        helper: "How many times a day does this roughly happen? Don't overthink it.",
+        footer: nil,
+        accent: Color(red: 0.30, green: 0.82, blue: 0.86),
+        multi: false,
+        options: [
+            .init(id: "few",     label: "A few times"),
+            .init(id: "10-30",   label: "Around 10–30"),
+            .init(id: "30-100",  label: "Around 30–100"),
+            .init(id: "100+",    label: "More than 100"),
+            .init(id: "unknown", label: "I honestly don't know"),
+        ]
+    ),
+    .init(
+        storageKey: "contexts",
+        title: "When does it happen most?",
+        helper: "We'll use this to show when it happens most.",
+        footer: nil,
+        accent: Color(red: 1.0, green: 0.62, blue: 0.38),
+        multi: true,
+        options: [
+            .init(id: "computer", label: "Working on computer"),
+            .init(id: "meetings", label: "During meetings"),
+            .init(id: "coding",   label: "While coding"),
+            .init(id: "thinking", label: "While thinking"),
+            .init(id: "studying", label: "Studying"),
+            .init(id: "videos",   label: "Watching videos"),
+            .init(id: "reading",  label: "Reading"),
+            .init(id: "gaming",   label: "Gaming"),
+            .init(id: "stress",   label: "During stress"),
+            .init(id: "boredom",  label: "During boredom"),
+        ]
+    ),
+    .init(
+        storageKey: "goal",
+        title: "What would feel useful?",
+        helper: "",
+        footer: nil,
+        accent: Color(red: 0.75, green: 0.52, blue: 0.98),
+        multi: false,
+        options: [
+            .init(id: "pull_less", label: "Notice patterns"),
+            .init(id: "awareness", label: "Take a pause"),
+            .init(id: "stop",      label: "Choose a cue"),
+            .init(id: "stress",    label: "Keep a private reflection"),
+        ]
+    ),
+]
+
+// MARK: - Steps
+
+private let detectionCheckAccent = Color(red: 0.24, green: 0.52, blue: 0.98)
+private let cueChoiceAccent     = Color(red: 0.82, green: 0.52, blue: 0.98)
+private let profileAccent       = Color(red: 0.30, green: 0.82, blue: 0.86)
+
+/// One step of the flow. The five checks are separate steps rather than one step with its own
+/// internal pager, so the progress dots, the back arrow and the shared CTA keep working through
+/// them unchanged.
+private enum Step {
+    case content(OnboardingPage)
+    case question(Question)
+    case detectionCheck(MobileDetectionCheckPage)
+    case cueChoice
+    case profileLoading
+
+    var accent: Color {
+        switch self {
+        case .content(let p):   return p.accent
+        case .question(let q):  return q.accent
+        case .detectionCheck:   return detectionCheckAccent
+        case .cueChoice:        return cueChoiceAccent
+        case .profileLoading:   return profileAccent
+        }
+    }
+
+    var cta: String {
+        switch self {
+        case .content(let p):   return p.cta
+        case .question:         return "Continue"
+        case .detectionCheck:   return "Next"
+        case .cueChoice:        return "Next"
+        case .profileLoading:   return ""   // the step draws its own button
+        }
+    }
+}
+
+private let steps: [Step] = pages.map(Step.content) + questions.map(Step.question)
+    + MobileDetectionCheckPage.allCases.map(Step.detectionCheck)
+    + [.cueChoice, .profileLoading]
+
+/// Index of the cue picker — where "Skip" on the first check lands.
+private let cueChoiceIndex: Int = steps.firstIndex {
+    if case .cueChoice = $0 { return true }
+    return false
+} ?? 0
+
+// MARK: - Container
+
+/// First-run intro. Calls `onFinish` when the person reaches the end of the flow.
 struct IPhoneOnboardingView: View {
     /// Shared with `ContentView`, so the session the checks start is the one the app goes on using.
     @ObservedObject var detector: Detector
     var onFinish: () -> Void
 
     @State private var index = 0
+    /// +1 when advancing, -1 when going back — drives the slide direction.
+    @State private var direction = 1
+    /// The answer to every question, seeded from what a previous run stored — a rerun of onboarding
+    /// arrives with its old answers ticked rather than blank. The questions write through dynamic
+    /// @AppStorage keys the container can't observe, so each step reports its answer back here and
+    /// `canAdvance` reads it: Continue is off only while nothing at all is chosen.
+    @State private var answers: [String: String] = Dictionary(
+        uniqueKeysWithValues: questions.map {
+            ($0.storageKey, UserDefaults.standard.string(forKey: $0.storageKey) ?? "")
+        })
+    /// What the detection checks have verified. Held here because each step view is re-created on
+    /// every index change, so the five check screens can't keep it between themselves.
     @StateObject private var checkState = MobileDetectionCheckState()
-    @State private var answers: [String: Set<String>] = [:]
-    @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
-    @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
-    @AppStorage("mobileBlurEnabled") private var blurEnabled = true
 
-    private var step: OnboardingStep { onboardingSteps[index] }
+    private var step: Step { steps[index] }
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            OnboardingBackground(accent: step.accent)
 
             VStack(spacing: 0) {
-                header
+                topBar
 
-                ScrollView(showsIndicators: false) {
-                    stepContent
-                        .frame(maxWidth: 620)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 18)
-                        .padding(.bottom, 26)
+                GeometryReader { geo in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        // The current step, re-created per index so transitions fire.
+                        Group {
+                            switch step {
+                            case .content(let page):
+                                contentView(page)
+                            case .question(let question):
+                                QuestionStepView(
+                                    question: question,
+                                    onAnswerChanged: { answers[question.storageKey] = $0 })
+                            case .detectionCheck(let page):
+                                MobileDetectionCheckView(page: page,
+                                                         accent: detectionCheckAccent,
+                                                         detector: detector,
+                                                         state: checkState,
+                                                         onSkip: skipChecks)
+                            case .cueChoice:
+                                CueChoiceStepView(accent: cueChoiceAccent)
+                            case .profileLoading:
+                                ProfileLoadingView(accent: profileAccent, onComplete: finish)
+                            }
+                        }
+                        .id(index)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: geo.size.height)
+                        .padding(.vertical, 8)
+                    }
+                    // The camera, behind the step rather than inside it. One preview layer is built
+                    // here and kept for the whole flow — see `CameraSlotKey` for what a layer per
+                    // step did to the app — while the checks only say where to put it. Behind, so
+                    // the head box and the status badge the step draws stay on top of the picture.
+                    .backgroundPreferenceValue(CameraSlotKey.self) { slots in
+                        GeometryReader { proxy in
+                            let slot = cameraSlot(slots, in: proxy)
+                            CameraPreviewView(session: detector.session)
+                                .frame(width: max(slot.width, 1), height: max(slot.height, 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .position(x: slot.midX, y: slot.midY)
+                                .opacity(slot.isEmpty ? 0 : 1)
+                                .allowsHitTesting(false)
+                        }
+                    }
                 }
 
-                footer
+                if case .profileLoading = step { } else { ctaButton }
             }
+            .padding(.top, 14)
+            .padding(.bottom, 12)
         }
         .accessibilityIdentifier("iphoneOnboarding")
-        // Replaying onboarding shows the answers already given, as the Mac's does — every question
-        // opens on its stored choice, so a second run is an edit rather than a blank form.
-        .onAppear(perform: restoreSavedAnswers)
         // Reaching the checks is what asks iOS for the camera. It stays on — and silent — for the
         // rest of the flow; `finish()` hands it back to the app in its normal, recording mode.
         .onChange(of: index) { _, newIndex in
-            guard case .detectionCheck = onboardingSteps[newIndex].kind else { return }
+            guard case .detectionCheck = steps[newIndex] else { return }
             detector.calibrating = true
             detector.start()
         }
+        .foregroundStyle(AwairaPalette.onboardingInk)
+        // This is a light, paper-like welcome rather than part of the app's dark dashboard. Keeping
+        // the first run light also ensures its softened blue type has enough contrast.
+        .preferredColorScheme(.light)
     }
 
-    private var header: some View {
-        VStack(spacing: 13) {
+    // MARK: Content step — illustration + copy
+
+    private func contentView(_ page: OnboardingPage) -> some View {
+        VStack(spacing: 26) {
+            Spacer(minLength: 0)
+
+            illustration(for: page)
+                .frame(height: 190)
+
+            VStack(spacing: 14) {
+                Text(page.title)
+                    .scaledFont(30, weight: .bold, design: .rounded)
+                    .foregroundStyle(AwairaPalette.onboardingBlue)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(page.body)
+                    .scaledFont(16, weight: .medium, design: .rounded)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: 480)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: Top bar — back arrow + progress dots
+
+    private var topBar: some View {
+        ZStack {
             HStack {
-                Text("Awaira")
-                    .font(.headline.weight(.bold))
+                Button(action: back) {
+                    Image(systemName: "chevron.left")
+                        .scaledFont(15, weight: .semibold)
+                        .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.7))
+                        .frame(width: 34, height: 34)
+                        .background(AwairaPalette.onboardingInk.opacity(0.08), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .opacity(index == 0 ? 0 : 1)
+                .disabled(index == 0)
+
                 Spacer()
             }
-            HStack(spacing: 6) {
-                ForEach(onboardingSteps.indices, id: \.self) { stepIndex in
+
+            // Fifteen steps have to fit a phone's width, so the dots are a size down from the Mac's.
+            HStack(spacing: 5) {
+                ForEach(steps.indices, id: \.self) { i in
                     Capsule()
-                        .fill(stepIndex == index ? step.accent : Color.secondary.opacity(0.25))
-                        .frame(width: stepIndex == index ? 22 : 5, height: 5)
-                        .animation(.easeInOut(duration: 0.2), value: index)
+                        .fill(i == index ? step.accent : AwairaPalette.onboardingInk.opacity(0.18))
+                        .frame(width: i == index ? 20 : 6, height: 6)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: index)
                 }
             }
-            .accessibilityLabel("Step \(index + 1) of \(onboardingSteps.count)")
+            .accessibilityElement()
+            .accessibilityLabel("Step \(index + 1) of \(steps.count)")
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
+        .padding(.horizontal, 20)
     }
 
-    @ViewBuilder private var stepContent: some View {
-        switch step.kind {
-        case .education(let page): educationPage(page)
-        case .question(let question): questionPage(question)
-        case .detectionCheck(let page):
-            MobileDetectionCheckView(page: page, accent: step.accent, detector: detector,
-                                     state: checkState, onSkip: skipChecks)
-        case .nudge: nudgePage
-        }
-    }
-
-    private func educationPage(_ page: EducationPage) -> some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 18)
-            MobileOnboardingIllustration(symbol: page.symbol, accent: page.accent)
-                .frame(width: 210, height: 150)
-            Text(page.title)
-                .font(.system(size: 31, weight: .bold, design: .rounded))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.primary)
-            Text(page.body)
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-            Spacer(minLength: 16)
-        }
-        .frame(maxWidth: .infinity, minHeight: 440)
-    }
-
-    private func questionPage(_ question: OnboardingQuestion) -> some View {
-        let selected = answers[question.key, default: []]
-        return VStack(alignment: .leading, spacing: 18) {
-            stepTitle(question.title, helper: question.helper)
-            VStack(spacing: 10) {
-                ForEach(question.options, id: \.self) { option in
-                    Button {
-                        toggle(option, for: question)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: selected.contains(option) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(option) ? question.accent : .secondary)
-                            Text(option)
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 15)
-                        .background(selected.contains(option) ? question.accent.opacity(0.12) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(selected.contains(option) ? question.accent.opacity(0.65) : Color(uiColor: .separator), lineWidth: 1) }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            if let footer = question.footer {
-                Text(footer)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .padding(.top, 6)
-            }
-        }
-        .padding(.top, 30)
-    }
-
-    private var nudgePage: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            stepTitle("Choose your cues", helper: "Choose any combination. Awaira only uses the options you check, and you can change them at any time in Settings.")
-            nudgeToggle(symbol: "iphone.radiowaves.left.and.right", title: "Vibrate", detail: "Buzz while a hand stays near your face.", color: .orange, isOn: $vibrateEnabled)
-            nudgeToggle(symbol: "waveform", title: "Voice", detail: "Play the same soft calming tone used in the desktop app.", color: .purple, isOn: $voiceEnabled)
-            nudgeToggle(symbol: "rectangle.on.rectangle", title: "Blur screen", detail: "Dim the screen briefly while Awaira is open.", color: .mint, isOn: $blurEnabled)
-        }
-        .padding(.top, 30)
-    }
-
-    private var footer: some View {
-        VStack(spacing: 12) {
-            Button(action: advance) {
-                Text(index == onboardingSteps.count - 1 ? "Continue to Awaira" : step.cta)
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(step.accent)
-            .disabled(!canAdvance)
-            .opacity(canAdvance ? 1 : 0.45)
-
-            if index > 0 {
-                Button("Back") { withAnimation(.easeInOut(duration: 0.2)) { index -= 1 } }
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 14)
-        .padding(.bottom, 26)
-        .background(.bar)
-    }
-
-    private func stepTitle(_ title: String, helper: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-            if !helper.isEmpty {
-                Text(helper)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-            }
-        }
-    }
-
-    private func nudgeRow(symbol: String, title: String, detail: String, color: Color) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbol)
-                .font(.title3)
-                .foregroundStyle(color)
-                .frame(width: 38, height: 38)
-                .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                Text(detail).font(.footnote).foregroundStyle(.secondary).lineSpacing(2)
-            }
-        }
-        .padding(16)
-        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(uiColor: .separator), lineWidth: 1) }
-    }
-
-    private func nudgeToggle(symbol: String, title: String, detail: String, color: Color,
-                             isOn: Binding<Bool>) -> some View {
-        Button { isOn.wrappedValue.toggle() } label: {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.title3)
-                    .foregroundStyle(isOn.wrappedValue ? color : .secondary)
-                    .frame(width: 38, height: 38)
-                    .background(color.opacity(isOn.wrappedValue ? 0.16 : 0.07), in: RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                    Text(detail).font(.footnote).foregroundStyle(.secondary).lineSpacing(2)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isOn.wrappedValue ? color : .secondary)
-            }
-            .padding(16)
-            .background(isOn.wrappedValue ? color.opacity(0.10) : Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(isOn.wrappedValue ? color.opacity(0.45) : Color(uiColor: .separator), lineWidth: 1) }
+    private var ctaButton: some View {
+        Button(action: next) {
+            Text(step.cta)
+                .scaledFont(17, weight: .semibold)
+                .foregroundStyle(.black.opacity(0.85))
+                .frame(maxWidth: 420)
+                .padding(.vertical, 16)
+                .background(step.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: step.accent.opacity(0.4), radius: 18, y: 8)
         }
         .buttonStyle(.plain)
+        .disabled(!canAdvance)
+        .opacity(canAdvance ? 1 : 0.5)
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .animation(.easeInOut(duration: 0.3), value: index)
     }
 
-    private func toggle(_ option: String, for question: OnboardingQuestion) {
-        var selected = answers[question.key, default: []]
-        if question.multiple {
-            if selected.contains(option) { selected.remove(option) } else { selected.insert(option) }
-        } else {
-            selected = [option]
+    // MARK: Navigation
+
+    private func next() {
+        guard canAdvance else { return }
+        if index == steps.count - 1 {
+            finish()
+            return
         }
-        answers[question.key] = selected
+        direction = 1
+        withAnimation(.easeInOut(duration: 0.35)) { index += 1 }
     }
 
-    private var canAdvance: Bool {
-        switch step.kind {
-        case .question(let question): return !(answers[question.key, default: []].isEmpty)
-        // A phone without a working camera, or one whose owner declined it, must still be able to
-        // finish onboarding — so the checks gate nothing.
-        case .education, .detectionCheck, .nudge: return true
-        }
-    }
-
-    private func advance() {
-        if index == onboardingSteps.count - 1 { finish() }
-        else { withAnimation(.easeInOut(duration: 0.22)) { index += 1 } }
-    }
-
-    /// Puts the stored answers back on screen. Anything not recognised (an option that has since
-    /// been renamed) is dropped rather than shown as a selection the list cannot display.
-    private func restoreSavedAnswers() {
-        let defaults = UserDefaults.standard
-        for step in onboardingSteps {
-            guard case .question(let question) = step.kind, answers[question.key] == nil else { continue }
-            let stored = (defaults.string(forKey: question.key) ?? "")
-                .split(separator: ",")
-                .map(String.init)
-                .filter(question.options.contains)
-            if !stored.isEmpty { answers[question.key] = Set(stored) }
-        }
+    private func back() {
+        guard index > 0 else { return }
+        direction = -1
+        withAnimation(.easeInOut(duration: 0.35)) { index -= 1 }
     }
 
     /// Past the whole block, to the cue picker. For anyone who does not want to rehearse, or whose
     /// phone has no usable camera.
     private func skipChecks() {
-        withAnimation(.easeInOut(duration: 0.22)) { index = nudgeStepIndex }
+        direction = 1
+        withAnimation(.easeInOut(duration: 0.35)) { index = cueChoiceIndex }
+    }
+
+    /// The rectangle the camera should fill, empty whenever nothing should be shown. Only the step
+    /// on screen is consulted: during a transition the one sliding out still reports its own slot,
+    /// and both sit in the same place anyway, so the picture never jumps.
+    private func cameraSlot(_ slots: [Int: Anchor<CGRect>], in proxy: GeometryProxy) -> CGRect {
+        guard case .detectionCheck(let page) = step,
+              detector.errorText == nil,
+              let anchor = slots[page.rawValue] else { return .zero }
+        return proxy[anchor]
+    }
+
+    private var canAdvance: Bool {
+        switch step {
+        case .question(let q):
+            // Every question requires at least one selection before continuing.
+            return !(answers[q.storageKey] ?? "").isEmpty
+        default:
+            // A phone without a working camera, or one whose owner declined it, must still be able
+            // to finish — so the educational pages, the checks and the cue picker gate nothing.
+            return true
+        }
     }
 
     private func finish() {
-        let defaults = UserDefaults.standard
-        for (key, values) in answers { defaults.set(values.sorted().joined(separator: ","), forKey: key) }
         // Back to normal: from here detections count and the chosen cues fire.
         detector.calibrating = false
         onFinish()
     }
+
+    @ViewBuilder
+    private func illustration(for page: OnboardingPage) -> some View {
+        switch page.illustration {
+        case .awareness:     AwarenessIllustration(accent: page.accent)
+        case .experience:    ExperienceIllustration(accent: page.accent)
+        case .normalTouches: NormalTouchesIllustration(accent: page.accent)
+        case .privacy:       PrivacyIllustration(accent: page.accent)
+        }
+    }
 }
 
-/// The mobile version keeps the desktop onboarding's illustration-first rhythm, scaled for a
-/// phone: a moving cue, the focused symbol, and a small sequence of evidence dots.
-private struct MobileOnboardingIllustration: View {
-    let symbol: String
+// MARK: - Question step
+
+/// A question screen: title + helper + a list of selectable options. Writes the answer straight to
+/// @AppStorage (single = one id, multi = comma-joined ids).
+private struct QuestionStepView: View {
+    let question: Question
+    /// Reports the answer as it now stands, empty string included: the container gates Continue on it.
+    var onAnswerChanged: (String) -> Void = { _ in }
+    @AppStorage private var raw: String
+
+    init(question: Question, onAnswerChanged: @escaping (String) -> Void = { _ in }) {
+        self.question = question
+        self.onAnswerChanged = onAnswerChanged
+        self._raw = AppStorage(wrappedValue: "", question.storageKey)
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 10) {
+                Text(question.title)
+                    .scaledFont(27, weight: .bold, design: .rounded)
+                    .foregroundStyle(AwairaPalette.onboardingBlue)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !question.helper.isEmpty {
+                    Text(question.helper)
+                        .scaledFont(15)
+                        .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: 480)
+
+            VStack(spacing: 10) {
+                ForEach(question.options) { optionRow($0) }
+            }
+
+            if let footer = question.footer {
+                Text(footer)
+                    .scaledFont(14)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.52))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 420)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 24)
+    }
+
+    private func optionRow(_ opt: Question.Option) -> some View {
+        let selected = isSelected(opt.id)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { toggle(opt.id) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: question.multi
+                      ? (selected ? "checkmark.square.fill" : "square")
+                      : (selected ? "largecircle.fill.circle" : "circle"))
+                    .scaledFont(18)
+                    .foregroundStyle(selected ? question.accent : AwairaPalette.onboardingInk.opacity(0.4))
+                Text(opt.label)
+                    .scaledFont(16, weight: .medium)
+                    .foregroundStyle(AwairaPalette.onboardingInk)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: 420)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(selected ? question.accent.opacity(0.18) : AwairaPalette.onboardingInk.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(selected ? question.accent.opacity(0.8) : AwairaPalette.onboardingInk.opacity(0.1),
+                            lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Selection state (single = replace, multi = toggle in a comma-joined set)
+
+    private var selectedSet: Set<String> {
+        Set(raw.split(separator: ",").map(String.init))
+    }
+
+    private func isSelected(_ id: String) -> Bool {
+        question.multi ? selectedSet.contains(id) : raw == id
+    }
+
+    private func toggle(_ id: String) {
+        if question.multi {
+            var set = selectedSet
+            if set.contains(id) { set.remove(id) } else { set.insert(id) }
+            raw = set.sorted().joined(separator: ",")
+        } else {
+            raw = (raw == id) ? "" : id
+        }
+        onAnswerChanged(raw)
+    }
+}
+
+// MARK: - Cue choice step
+
+/// The phone's version of the desktop's reaction picker. The Mac chooses between three screen
+/// effects; the phone's three cues are independent of each other — vibrate, tone, dim — so each is
+/// a switch with its own live rehearsal rather than one of three alternatives.
+private struct CueChoiceStepView: View {
+    let accent: Color
+    @AppStorage("mobileVibrateEnabled") private var vibrateEnabled = true
+    @AppStorage("mobileVoiceEnabled") private var voiceEnabled = false
+    @AppStorage("mobileBlurEnabled") private var blurEnabled = true
+
+    /// Which cue is previewing right now, so its button can say "Stop" and the dim demo can run.
+    @State private var previewing: Cue? = nil
+    @State private var previewTask: Task<Void, Never>? = nil
+
+    private enum Cue { case vibrate, voice, dim }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 10) {
+                Text("Pick your gentle nudge")
+                    .scaledFont(27, weight: .bold, design: .rounded)
+                    .foregroundStyle(AwairaPalette.onboardingBlue)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("When your hand lingers on your face, Awaira brings you back. Try each one and keep the ones that help. You can change them anytime in Settings.")
+                    .scaledFont(15)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: 480)
+
+            cueCard(cue: .vibrate,
+                    on: $vibrateEnabled,
+                    icon: "iphone.radiowaves.left.and.right",
+                    title: "Vibrate",
+                    subtitle: "A buzz that holds while your hand stays near your face.")
+
+            cueCard(cue: .voice,
+                    on: $voiceEnabled,
+                    icon: "waveform",
+                    title: "Calming tone",
+                    subtitle: "The same soft tone the desktop app plays while the hand lingers.",
+                    aggressive: true)
+
+            cueCard(cue: .dim,
+                    on: $blurEnabled,
+                    icon: "rectangle.on.rectangle",
+                    title: "Dim the screen",
+                    subtitle: "Awaira's screen dims with one encouraging line until you lower your hand.",
+                    showsDemo: true)
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 24)
+        .onDisappear { stopPreview() }
+    }
+
+    /// A small caution pill marking the more intense cue, so the choice isn't only "which is nicer"
+    /// but also "how forceful do I want this to be".
+    private var aggressiveBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .scaledFont(9, weight: .semibold)
+            Text("More aggressive option")
+                .scaledFont(11, weight: .semibold)
+        }
+        .foregroundStyle(Color.orange)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.orange.opacity(0.14), in: Capsule())
+    }
+
+    @ViewBuilder
+    private func cueCard(
+        cue: Cue,
+        on binding: Binding<Bool>,
+        icon: String,
+        title: String,
+        subtitle: String,
+        aggressive: Bool = false,
+        /// Only the dim cue has something to show: the other two are felt and heard, not seen.
+        showsDemo: Bool = false
+    ) -> some View {
+        let on = binding.wrappedValue
+        let running = previewing == cue
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { binding.wrappedValue.toggle() }
+        } label: {
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 14) {
+                    Image(systemName: on ? icon : "bell.slash.fill")
+                        .scaledFont(18)
+                        .foregroundStyle(on ? accent : AwairaPalette.onboardingInk.opacity(0.35))
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .scaledFont(15, weight: .medium)
+                            .foregroundStyle(AwairaPalette.onboardingInk)
+                        Text(subtitle)
+                            .scaledFont(12)
+                            .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        // The rehearsal button lives inside the label so the card still toggles on
+                        // its own tap.
+                        Button {
+                            if running { stopPreview() } else { startPreview(cue) }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: running ? "stop.fill" : "play.fill")
+                                    .scaledFont(9, weight: .semibold)
+                                Text(running ? "Stop" : "Try it")
+                                    .scaledFont(12, weight: .semibold)
+                            }
+                            .foregroundStyle(accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(accent.opacity(0.15), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 2)
+
+                        if aggressive { aggressiveBadge.padding(.top, 2) }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                        .scaledFont(20)
+                        .foregroundStyle(on ? accent : AwairaPalette.onboardingInk.opacity(0.25))
+                }
+
+                if showsDemo { DimDemo(active: running) }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: 480)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(on ? accent.opacity(0.14) : AwairaPalette.onboardingInk.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(on ? accent.opacity(0.75) : AwairaPalette.onboardingInk.opacity(0.1), lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Runs the real cue for three seconds — the same call the detector makes at level 3 — so what
+    /// is rehearsed here is exactly what the phone will do later.
+    private func startPreview(_ cue: Cue) {
+        stopPreview()
+        switch cue {
+        case .vibrate: Haptics.startSustained()
+        case .voice:   CalmingTone.startSustained()
+        case .dim:     break   // the demo tile below the card is the whole rehearsal
+        }
+        withAnimation(.easeInOut(duration: 0.25)) { previewing = cue }
+        previewTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            stopPreview()
+        }
+    }
+
+    private func stopPreview() {
+        previewTask?.cancel()
+        previewTask = nil
+        Haptics.stopSustained()
+        CalmingTone.stopSustained()
+        withAnimation(.easeInOut(duration: 0.25)) { previewing = nil }
+    }
+}
+
+/// A phone-shaped tile that dims exactly the way `DimOverlay` does, so the dim cue can be seen
+/// before it is chosen.
+private struct DimDemo: View {
+    let active: Bool
+
+    var body: some View {
+        ZStack {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(0..<4, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.16))
+                        .frame(maxWidth: i == 3 ? 60 : .infinity)
+                        .frame(height: 7)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if active {
+                Color.black.opacity(0.55)
+                Text("You've got this.")
+                    .scaledFont(14, weight: .semibold)
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(height: 96)
+        .background(Color(red: 0.10, green: 0.11, blue: 0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .animation(.easeInOut(duration: 0.3), value: active)
+    }
+}
+
+// MARK: - Profile loading step
+
+/// The last screen. On the Mac its button opens pricing; here it opens the app, because there is
+/// nothing to sell on the phone.
+private struct ProfileLoadingView: View {
+    let accent: Color
+    let onComplete: () -> Void
+
+    private let items = ["Personalizing reminders", "Setting your baseline", "Preparing detection"]
+
+    @State private var revealed = 0       // how many checkmarks are visible
+    @State private var showReady = false
+
+    var body: some View {
+        VStack(spacing: 30) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 14) {
+                Text("Creating your awareness profile…")
+                    .scaledFont(24, weight: .bold, design: .rounded)
+                    .foregroundStyle(AwairaPalette.onboardingBlue)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(items.indices, id: \.self) { i in
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(i < revealed ? accent.opacity(0.2)
+                                                       : AwairaPalette.onboardingInk.opacity(0.06))
+                                    .frame(width: 28, height: 28)
+                                if i < revealed {
+                                    Image(systemName: "checkmark")
+                                        .scaledFont(12, weight: .bold)
+                                        .foregroundStyle(accent)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
+                            }
+                            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: revealed)
+
+                            Text(items[i])
+                                .scaledFont(16)
+                                .foregroundStyle(AwairaPalette.onboardingInk.opacity(i < revealed ? 0.85 : 0.3))
+                                .animation(.easeInOut(duration: 0.3), value: revealed)
+                        }
+                    }
+                }
+                .frame(maxWidth: 320, alignment: .leading)
+            }
+
+            if showReady {
+                VStack(spacing: 16) {
+                    Text("You're ready.")
+                        .scaledFont(21, weight: .bold, design: .rounded)
+                        .foregroundStyle(AwairaPalette.onboardingInk)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                    Button(action: onComplete) {
+                        Text("Start using Awaira")
+                            .scaledFont(17, weight: .semibold)
+                            .foregroundStyle(.black.opacity(0.85))
+                            .frame(maxWidth: 420)
+                            .padding(.vertical, 16)
+                            .background(accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(color: accent.opacity(0.4), radius: 18, y: 8)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .onAppear(perform: runSequence)
+    }
+
+    private func runSequence() {
+        for i in items.indices {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i + 1) * 0.7) {
+                withAnimation { revealed = i + 1 }
+            }
+        }
+        let total = Double(items.count + 1) * 0.7
+        DispatchQueue.main.asyncAfter(deadline: .now() + total) {
+            withAnimation(.easeInOut(duration: 0.4)) { showReady = true }
+        }
+    }
+}
+
+// MARK: - Background
+
+/// The soft, text-safe paper illustration used exclusively for the first run, copied from the Mac's
+/// asset catalogue so the two first runs are the same picture.
+private struct OnboardingBackground: View {
     let accent: Color
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let phase = (sin(context.date.timeIntervalSinceReferenceDate * 1.5) + 1) / 2
-            ZStack {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .stroke(accent.opacity((0.28 - Double(index) * 0.07) * (0.55 + phase * 0.45)), lineWidth: 1.5)
-                        .frame(width: CGFloat(76 + index * 34) + phase * 10,
-                               height: CGFloat(76 + index * 34) + phase * 10)
+        Image("OnboardingPaper")
+            .resizable()
+            // Intentionally stretched rather than cropped: its corner shapes and bottom ripple are
+            // part of the composition and must stay visible.
+            .overlay(accent.opacity(0.025))
+            .ignoresSafeArea()
+    }
+}
+
+// MARK: - Illustration 1: Awareness radar
+
+/// Concentric pings expanding from a watchful eye — noticing the movement in real time.
+private struct AwarenessIllustration: View {
+    let accent: Color
+
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let maxR = min(size.width, size.height) * 0.46
+
+                for i in 0..<3 {
+                    let p = ((t * 0.5 + Double(i) / 3).truncatingRemainder(dividingBy: 1))
+                    let radius = maxR * p
+                    let ring = CGRect(x: c.x - radius, y: c.y - radius,
+                                      width: radius * 2, height: radius * 2)
+                    ctx.stroke(Path(ellipseIn: ring),
+                               with: .color(accent.opacity((1 - p) * 0.6)),
+                               lineWidth: 2)
                 }
-                Image(systemName: symbol)
-                    .font(.system(size: 43, weight: .medium))
+
+                // Glow behind the eye.
+                let gr = maxR * 0.5
+                let glow = CGRect(x: c.x - gr, y: c.y - gr, width: gr * 2, height: gr * 2)
+                ctx.fill(Path(ellipseIn: glow), with: .color(accent.opacity(0.16)))
+
+                if let eye = ctx.resolveSymbol(id: 0) {
+                    ctx.draw(eye, at: c)
+                }
+            } symbols: {
+                Image(systemName: "eye.fill")
+                    .scaledFont(42)
                     .foregroundStyle(accent)
-                    .frame(width: 84, height: 84)
-                    .background(accent.opacity(0.15), in: Circle())
-                    .overlay { Circle().stroke(accent.opacity(0.5), lineWidth: 1.5) }
-                HStack(spacing: 8) {
-                    ForEach(0..<4, id: \.self) { index in
-                        Circle().fill(index == 2 ? accent : Color.secondary.opacity(0.25)).frame(width: 7, height: 7)
-                    }
-                }
-                .offset(y: 82)
+                    .tag(0)
             }
         }
     }
 }
 
-private struct OnboardingStep {
-    enum Kind {
-        case education(EducationPage), question(OnboardingQuestion)
-        case detectionCheck(MobileDetectionCheckPage), nudge
-    }
-    let kind: Kind
-    let accent: Color
-    let cta: String
-}
+// MARK: - Illustration 2: Experience flow
 
-private struct EducationPage {
-    let symbol: String
+/// Four-step looping animation: reading → hand up → gentle cue → hand down.
+private struct ExperienceIllustration: View {
     let accent: Color
-    let title: String
-    let body: String
-}
 
-private struct OnboardingQuestion {
-    let key: String
-    let title: String
-    let helper: String
-    let footer: String?
-    let options: [String]
-    let multiple: Bool
-    let accent: Color
-}
-
-private let onboardingSteps: [OnboardingStep] = {
-    let pages: [EducationPage] = [
-        .init(symbol: "hand.raised.fill", accent: .indigo, title: "Notice a moment sooner.", body: "Awaira notices hand to face movements while you work, study, read, or watch videos. It cannot tell why a movement happened or label it."),
-        .init(symbol: "eye.fill", accent: .mint, title: "Optional cues.", body: "A calm cue can make a hand to face movement easier to notice. You choose which cues to use and can change them at any time."),
-        .init(symbol: "brain.head.profile", accent: .orange, title: "Awaira doesn't diagnose.", body: "A movement is just a movement. Awaira does not diagnose a condition or decide what you intended to do."),
-        .init(symbol: "chart.line.uptrend.xyaxis", accent: .green, title: "Your history stays private.", body: "Your on-device history can help you reflect on the moments you choose to notice. It is not a score or a measure of your health."),
-        .init(symbol: "arrow.uturn.backward.circle.fill", accent: .cyan, title: "How it works", body: "When your hand moves toward your face, Awaira shows a short visual cue. Lower your hand and carry on."),
-        .init(symbol: "hand.point.up.left.fill", accent: .yellow, title: "Most touches are normal.", body: "Thinking, resting your chin, scratching an itch, and adjusting glasses are all normal. A cue just helps you notice. It isn't a judgement or a health conclusion."),
-        // The permission sentence names the camera on purpose: the detection checks a few screens
-        // later ask for it, and a promise made here that the flow then breaks is worse than no
-        // promise at all. What has not changed is the part that matters — nothing leaves the phone.
-        .init(symbol: "lock.shield.fill", accent: .blue, title: "Everything stays on your iPhone.", body: "Camera frames, detections, selected behavior, and progress history are not uploaded. Detection runs on this iPhone, even without an internet connection. In a moment Awaira will ask for the camera, so you can watch detection work before you decide anything.")
+    private let steps: [(icon: String, label: String)] = [
+        ("iphone",             "Reading normally"),
+        ("hand.raised.fill",   "Hand reaches face"),
+        ("rays",               "Gentle cue arrives"),
+        ("hand.thumbsup.fill", "You lower your hand"),
     ]
-    let questions: [OnboardingQuestion] = [
-        .init(key: "behaviors", title: "What would you like to notice?", helper: "Awaira notices hand to face motion, not a behaviour or diagnosis.", footer: nil, options: ["Movement toward hair", "Movement toward nails", "Movement toward face or skin", "General hand to face awareness"], multiple: true, accent: .indigo),
-        .init(key: "frequencyEstimate", title: "What's your best guess?", helper: "How many times a day does this roughly happen? Don't overthink it.", footer: nil, options: ["A few times", "Around 10–30", "Around 30–100", "More than 100", "I honestly don't know"], multiple: false, accent: .mint),
-        .init(key: "contexts", title: "When does it happen most?", helper: "We'll use this to show when it happens most.", footer: nil, options: ["Working on computer", "During meetings", "While coding", "While thinking", "Studying", "Watching videos", "Reading", "Gaming", "During stress", "During boredom"], multiple: true, accent: .orange),
-        .init(key: "goal", title: "What would feel useful?", helper: "", footer: nil, options: ["Notice patterns", "Take a pause", "Choose a cue", "Keep a private reflection"], multiple: false, accent: .purple)
-    ]
-    // The five checks go last before the cue picker: by then the person knows what Awaira watches
-    // for, and the picker stops being a blind choice.
-    let checks = MobileDetectionCheckPage.allCases.map {
-        OnboardingStep(kind: .detectionCheck($0), accent: .blue, cta: "Continue")
-    }
-    return pages.map { .init(kind: .education($0), accent: $0.accent, cta: "Continue") }
-        + questions.map { .init(kind: .question($0), accent: $0.accent, cta: "Continue") }
-        + checks
-        + [.init(kind: .nudge, accent: .purple, cta: "Continue")]
-}()
 
-/// Index of the cue picker — where "Skip" on the first check lands.
-private let nudgeStepIndex: Int = onboardingSteps.firstIndex {
-    if case .nudge = $0.kind { return true }
-    return false
-} ?? 0
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t    = tl.date.timeIntervalSinceReferenceDate
+            let step = Int(t / 1.4) % steps.count   // each step ~1.4 s
+
+            HStack(spacing: 0) {
+                ForEach(steps.indices, id: \.self) { i in
+                    let active = i == step
+                    HStack(spacing: 0) {
+                        VStack(spacing: 8) {
+                            ZStack {
+                                Circle()
+                                    .fill(active ? accent.opacity(0.22) : AwairaPalette.onboardingInk.opacity(0.05))
+                                    .frame(width: 46, height: 46)
+                                Image(systemName: steps[i].icon)
+                                    .scaledFont(active ? 20 : 17, weight: .semibold)
+                                    .foregroundStyle(active ? accent : AwairaPalette.onboardingInk.opacity(0.3))
+                            }
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: step)
+
+                            Text(steps[i].label)
+                                .scaledFont(10, weight: active ? .semibold : .regular)
+                                .foregroundStyle(AwairaPalette.onboardingInk.opacity(active ? 0.9 : 0.28))
+                                .multilineTextAlignment(.center)
+                                .frame(width: 68)
+                                .animation(.easeInOut(duration: 0.25), value: step)
+                        }
+
+                        if i < steps.count - 1 {
+                            Image(systemName: "chevron.right")
+                                .scaledFont(10, weight: .semibold)
+                                .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.18))
+                                .padding(.bottom, 24)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Illustration 3: Normal touches
+
+/// A face outline with several everyday gestures shown around it — thinking, chin rest, glasses,
+/// scratch — to illustrate that not every detection is a habit.
+private struct NormalTouchesIllustration: View {
+    let accent: Color
+
+    // Tighter radii than the Mac's: the same composition has to sit inside a phone's width.
+    private let gestures: [(icon: String, label: String, angle: Double, radius: Double)] = [
+        ("hand.raised",        "thinking",         -40,  86),
+        ("hand.point.up.left", "chin rest",         30,  84),
+        ("eyeglasses",         "adjusting glasses",160,  78),
+        ("hand.tap",           "scratching",      -140,  80),
+    ]
+
+    var body: some View {
+        Canvas { ctx, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let faceR: CGFloat = 30
+
+            // Face circle
+            let faceRect = CGRect(x: c.x - faceR, y: c.y - faceR, width: faceR * 2, height: faceR * 2)
+            ctx.stroke(Path(ellipseIn: faceRect), with: .color(AwairaPalette.onboardingInk.opacity(0.5)), lineWidth: 2)
+
+            // Eyes
+            for dx in [-faceR * 0.36, faceR * 0.36] {
+                let eye = CGRect(x: c.x + dx - 3, y: c.y - faceR * 0.2 - 3, width: 6, height: 6)
+                ctx.fill(Path(ellipseIn: eye), with: .color(AwairaPalette.onboardingInk.opacity(0.5)))
+            }
+
+            // Dashed lines from face to each gesture
+            for g in gestures {
+                let rad = g.angle * .pi / 180
+                let end = CGPoint(x: c.x + cos(rad) * g.radius * 0.62,
+                                  y: c.y + sin(rad) * g.radius * 0.62)
+                var line = Path(); line.move(to: c); line.addLine(to: end)
+                ctx.stroke(line, with: .color(AwairaPalette.onboardingInk.opacity(0.1)),
+                           style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
+            }
+        }
+        .overlay {
+            GeometryReader { geo in
+                let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+                ForEach(gestures, id: \.label) { g in
+                    let rad = g.angle * .pi / 180
+                    let pos = CGPoint(x: c.x + cos(rad) * g.radius,
+                                      y: c.y + sin(rad) * g.radius)
+                    VStack(spacing: 4) {
+                        Image(systemName: g.icon)
+                            .scaledFont(17, weight: .medium)
+                            .foregroundStyle(accent.opacity(0.75))
+                        Text(g.label)
+                            .scaledFont(10)
+                            .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.45))
+                            .fixedSize()
+                    }
+                    .position(pos)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Illustration 4: Privacy
+
+/// A shield over an on-device loop (iPhone ↔ camera) with the cloud crossed out.
+private struct PrivacyIllustration: View {
+    let accent: Color
+
+    var body: some View {
+        ZStack {
+            // Dashed "stays on your iPhone" boundary.
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 7]))
+                .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.18))
+                .frame(width: 240, height: 140)
+
+            HStack(spacing: 28) {
+                deviceIcon("iphone", label: "Your iPhone")
+                Image(systemName: "arrow.left.arrow.right")
+                    .scaledFont(17, weight: .semibold)
+                    .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.4))
+                deviceIcon("camera.fill", label: "Camera")
+            }
+
+            // Shield badge floating at the top.
+            Image(systemName: "lock.shield.fill")
+                .scaledFont(46)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(AwairaPalette.onboardingInk, accent)
+                .background(
+                    Circle().fill(AwairaPalette.onboardingCanvas).frame(width: 52, height: 52)
+                )
+                .offset(y: -80)
+
+            // Nothing leaves — cloud crossed out.
+            HStack(spacing: 6) {
+                Image(systemName: "icloud.slash")
+                    .scaledFont(14, weight: .semibold)
+                Text("Local detection")
+                    .scaledFont(12, weight: .medium)
+            }
+            .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.55))
+            .offset(y: 84)
+        }
+    }
+
+    private func deviceIcon(_ name: String, label: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: name)
+                .scaledFont(30)
+                .foregroundStyle(accent)
+                .frame(width: 52, height: 52)
+                .background(AwairaPalette.onboardingInk.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            Text(label)
+                .scaledFont(11)
+                .foregroundStyle(AwairaPalette.onboardingInk.opacity(0.5))
+        }
+    }
+}
