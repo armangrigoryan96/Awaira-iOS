@@ -6,6 +6,12 @@
 - **Team and scheme:** team `S6HG6FS5JJ`, scheme `Awaira`.
 - `Awaira.xcodeproj` and `Sources/Info.plist` are generated and gitignored. Change `project.yml`, then run `make generate`.
 
+## Hard rules
+- **Privacy:** detection runs on the device. No camera frames, habit, detection or progress data may leave the phone. Don't add network calls, device identifiers, analytics or crash SDKs without the user's explicit OK.
+- **Tone:** Awaira is an awareness companion, not a scorekeeper, and a detection is never framed as failure. See `docs/AWAIRA-UX-STRUCTURE.md` in `../Awaira-Main`.
+- **Wording:** never claim Awaira prevents, cures, treats or fixes trichotillomania or any other BFRB. In user-facing text (app, App Store listing, review notes) use no emojis, no dashes as punctuation, and nothing that reads as machine-written.
+- **Secrets:** never print or commit signing material, App Store Connect keys, `.env*` files or secret values.
+
 ## Commands (run from the repo root)
 - `make generate`, `make build`, `make run`: `SIMULATOR` defaults to "iPhone 17".
 - `make test`: unit and UI tests. `make unit`: `AwairaTests` only.
@@ -47,6 +53,7 @@ The simulator has no camera, so detection can only be exercised on a device or t
 ## Related repos (siblings in `~/Desktop/Projects/Awaira/`)
 - `Awaira-Main`: macOS app (`frontend/`), backend and website (`server/`), and the Insights app. Its `server/public/demo/js/detection-core.js` is a port of `Sources/DetectionCore.swift`, so keep them in step.
 - `Awaira-Android`: Android app. The paywall and pricing UI are matched across platforms.
+- `Awaira-Windows` and `Awaira-Linux`: desktop apps with the same detection constants.
 
 ## Git
 Commit messages are short imperative sentences. Never commit `build*/`, `Awaira.xcodeproj` or `Sources/Info.plist`.
