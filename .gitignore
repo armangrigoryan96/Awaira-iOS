@@ -6,3 +6,7 @@ build/
 DerivedData/
 *.xcuserstate
 .DS_Store
+build-*/
+*.xcarchive
+.claude/worktrees/
+.claude/settings.local.json
