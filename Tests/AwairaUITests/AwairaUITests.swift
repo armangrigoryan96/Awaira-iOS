@@ -44,9 +44,9 @@ final class AwairaUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
-    /// The paywall lists exactly the three App Store products, each with its own reachable button,
-    /// plus Restore Purchases, which App Review requires. There is no device-local trial plan.
-    func testPaywallListsTheThreeProductsAndRestore() {
+    /// The paywall begins with a device-local seven-day trial, followed by the three App Store
+    /// products and Restore Purchases.
+    func testPaywallListsTheFreeTrialProductsAndRestore() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITest", "-ScreenshotPaywall"]
         app.launch()
@@ -57,7 +57,7 @@ final class AwairaUITests: XCTestCase {
             for _ in 0..<4 where !button.exists { app.swipeUp() }
             XCTAssertTrue(button.exists, "Missing purchase button for \(id)")
         }
-        XCTAssertFalse(app.buttons["premiumFreeTrialButton"].exists)
+        XCTAssertTrue(app.buttons["premiumFreeTrialButton"].exists)
         let restore = app.buttons["premiumRestoreButton"]
         for _ in 0..<4 where !restore.exists { app.swipeUp() }
         XCTAssertTrue(restore.exists)

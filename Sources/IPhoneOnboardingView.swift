@@ -6,9 +6,9 @@ import SwiftUI
 //
 // Three desktop steps are deliberately absent. "How did you hear about us?" reports to the server
 // on the Mac and the phone has no such call, so here it would only ask a question nobody could ever
-// read. The daily-commitment step has nothing to drive on a phone that keeps no streak. And pricing
-// does not exist here at all — the iPhone app is free, with no trial to start and nothing to sell,
-// so the flow ends on the profile screen, whose button goes straight into the app.
+// read. The daily-commitment step has nothing to drive on a phone that keeps no streak. Pricing is
+// kept out of the learning flow itself; after the profile screen, the access gate offers the
+// seven-day free trial before any paid plan.
 
 // MARK: - Model
 

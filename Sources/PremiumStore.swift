@@ -38,9 +38,6 @@ final class PremiumStore: ObservableObject {
     ])
 
     @Published private(set) var products: [String: Product] = [:]
-    /// Product IDs whose introductory free trial this Apple Account can still redeem. Apple only
-    /// grants a trial once per subscription group, so an ineligible customer is charged right away.
-    @Published private(set) var trialEligibleProductIDs: Set<String> = []
     @Published private(set) var isPremiumUnlocked = false
     @Published private(set) var state: PurchaseState = .loading
     /// Set after a restore that found no purchase on this Apple Account, so the Restore button
@@ -68,7 +65,6 @@ final class PremiumStore: ObservableObject {
         do {
             let fetchedProducts = try await Product.products(for: Self.storeKitProductIDs)
             products = Dictionary(uniqueKeysWithValues: fetchedProducts.map { ($0.id, $0) })
-            trialEligibleProductIDs = await Self.trialEligibleIDs(in: fetchedProducts)
             state = products.isEmpty ? .unavailable : (isPremiumUnlocked ? .purchased : .ready)
         } catch {
             state = .failed("We couldn't load the purchase right now. Please try again.")
@@ -77,43 +73,6 @@ final class PremiumStore: ObservableObject {
 
     func product(for id: String) -> Product? {
         products[resolvedProductID(for: id)]
-    }
-
-    /// A free trial is an App Store introductory offer, never an app-owned timer. Apple therefore
-    /// decides eligibility and issues the entitlement as soon as the customer accepts the offer.
-    func freeTrialDescription(for productID: String) -> String? {
-        let resolvedID = resolvedProductID(for: productID)
-        guard trialEligibleProductIDs.contains(resolvedID),
-              let offer = products[resolvedID]?.subscription?.introductoryOffer,
-              offer.paymentMode == .freeTrial else { return nil }
-
-        let count = offer.period.value
-        let unit: String
-        switch offer.period.unit {
-        case .day: unit = count == 1 ? "day" : "days"
-        case .week: unit = count == 1 ? "week" : "weeks"
-        case .month: unit = count == 1 ? "month" : "months"
-        case .year: unit = count == 1 ? "year" : "years"
-        @unknown default: unit = "period"
-        }
-        return "\(count)-\(unit) free trial"
-    }
-
-    /// "$23.99 per year" — what a subscription renews at once its free trial ends. Apple requires
-    /// this to be stated beside any free-trial offer.
-    func renewalTerms(for productID: String) -> String? {
-        guard let product = product(for: productID),
-              let period = product.subscription?.subscriptionPeriod else { return nil }
-        let unit: String
-        switch period.unit {
-        case .day: unit = "day"
-        case .week: unit = "week"
-        case .month: unit = "month"
-        case .year: unit = "year"
-        @unknown default: return nil
-        }
-        let every = period.value == 1 ? unit : "\(period.value) \(unit)s"
-        return "\(product.displayPrice) per \(every)"
     }
 
     /// The yearly price spread over twelve months, in the customer's own storefront currency.
@@ -183,16 +142,6 @@ final class PremiumStore: ObservableObject {
             }
         }
         isPremiumUnlocked = unlocked
-    }
-
-    private static func trialEligibleIDs(in products: [Product]) async -> Set<String> {
-        var eligible: Set<String> = []
-        for product in products {
-            if let subscription = product.subscription, await subscription.isEligibleForIntroOffer {
-                eligible.insert(product.id)
-            }
-        }
-        return eligible
     }
 
     private func verified<T>(_ result: VerificationResult<T>) throws -> T {

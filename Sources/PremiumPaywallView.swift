@@ -4,6 +4,7 @@ import SwiftUI
 /// localized StoreKit price, and describes the one-time entitlement without implying a renewal.
 struct PremiumPaywallView: View {
     @ObservedObject var store: PremiumStore
+    @ObservedObject var trial: TrialAccess
     /// When this paywall is the app's access gate, there is intentionally no close button: the
     /// customer can restore a purchase or select a plan, but not bypass Premium access.
     var isRequired = false
@@ -16,6 +17,7 @@ struct PremiumPaywallView: View {
     /// StoreKit cannot retrieve live App Store products in an ordinary simulator. This is only for
     /// the repeatable, in-app review-screenshot route; release builds always use `displayPrice`.
     private let isScreenshotDemo = ProcessInfo.processInfo.arguments.contains("-ScreenshotPaywall")
+    @State private var trialStartFailed = false
 
     var body: some View {
         NavigationStack {
@@ -24,8 +26,13 @@ struct PremiumPaywallView: View {
                     hero
                         .padding(.top, 18)
 
+                    if trial.canStart {
+                        freeTrialChoice
+                            .padding(.top, 24)
+                    }
+
                     planChoices
-                        .padding(.top, 24)
+                        .padding(.top, trial.canStart ? 14 : 24)
 
                     purchaseControls
                         .padding(.top, 18)
@@ -106,6 +113,79 @@ struct PremiumPaywallView: View {
         }
     }
 
+    /// This is app-owned access, not an App Store subscription offer: it starts seven days of full
+    /// use without asking the person to select a paid plan. Once it has run, `canStart` stays false
+    /// because the expiry lives in the Keychain, and the same paywall becomes paid-only.
+    private var freeTrialChoice: some View {
+        VStack(spacing: 12) {
+            Text("START HERE")
+                .scaledFont(11, weight: .bold)
+                .foregroundStyle(Color.black.opacity(0.78))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(pricingAccent, in: Capsule())
+
+            Text("7-day free trial")
+                .awairaCardTitle(20)
+                .foregroundStyle(AwairaPalette.text)
+
+            Text("Full access for 7 days. No payment needed.")
+                .awairaCaption(13)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.66))
+                .multilineTextAlignment(.center)
+
+            Rectangle()
+                .fill(AwairaPalette.ink.opacity(0.08))
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                trialFeature("Hand-to-face detection and your chosen cues")
+                trialFeature("Patterns, journal and private history")
+                trialFeature("No account or payment method")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                trialStartFailed = !trial.start()
+            } label: {
+                Text("Start 7-day free trial")
+                    .scaledFont(14, weight: .semibold)
+                    .foregroundStyle(Color.black.opacity(0.85))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+            .background(pricingAccent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityIdentifier("premiumFreeTrialButton")
+
+            if trialStartFailed {
+                Text("We couldn't start the free trial on this iPhone. Please try again.")
+                    .awairaCaption(12)
+                    .foregroundStyle(AwairaPalette.alert)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(pricingAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(pricingAccent.opacity(0.6), lineWidth: 1.5)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private func trialFeature(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark")
+                .scaledFont(10, weight: .semibold)
+                .foregroundStyle(pricingAccent)
+            Text(text)
+                .awairaCaption(12)
+                .foregroundStyle(AwairaPalette.ink.opacity(0.78))
+        }
+    }
+
     @ViewBuilder private var purchaseControls: some View {
         if store.isPremiumUnlocked {
             Label("Awaira Premium is active", systemImage: "checkmark.seal.fill")
@@ -180,28 +260,19 @@ struct PremiumPaywallView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The free-trial promise appears only when StoreKit says this Apple Account can redeem an
-    /// introductory offer; a customer who already used it is charged at once, so the copy must not
-    /// suggest otherwise. Names whichever plans carry the offer ("Monthly and Yearly include…").
-    private var trialPromise: String? {
-        let plans = PremiumPlan.all.filter { store.freeTrialDescription(for: $0.id) != nil }
-        guard let trial = plans.first.flatMap({ store.freeTrialDescription(for: $0.id) }) else { return nil }
-        let names = plans.map(\.title).joined(separator: " and ")
-        return "\(names) \(plans.count == 1 ? "includes" : "include") a \(trial)"
-    }
-
     private var heroTitle: String {
-        trialPromise == nil ? "Choose your Awaira plan." : "Start free, upgrade when ready."
+        if trial.canStart { return "Start free, upgrade when ready." }
+        return trial.hasExpired ? "Choose your Awaira plan." : "Unlock Awaira Premium."
     }
 
     private var heroSubtitle: String {
-        if let trialPromise { return "\(trialPromise)  ·  Cancel anytime" }
+        if trial.canStart { return "7 days of full access  ·  No payment needed" }
+        if trial.hasExpired { return "Your 7-day free trial has ended." }
         return "No account needed  ·  Detection stays on-device"
     }
 
     private func actionTitle(for plan: PremiumPlan) -> String {
         if store.state == .purchasing { return "Purchasing…" }
-        if let trial = store.freeTrialDescription(for: plan.id) { return "Start \(trial)" }
         return "Choose plan"
     }
 
@@ -225,7 +296,6 @@ struct PremiumPaywallView: View {
     }
 
     private func detail(for plan: PremiumPlan) -> String {
-        if let trial = store.freeTrialDescription(for: plan.id) { return trial }
         if let monthly = store.monthlyEquivalentPrice(for: plan.id) { return "About \(monthly) per month" }
         return plan.detail
     }
@@ -235,13 +305,7 @@ struct PremiumPaywallView: View {
     }
 
     private var legalDisclosure: String {
-        var trialTerms: [String] = []
-        for plan in PremiumPlan.all {
-            guard let trial = store.freeTrialDescription(for: plan.id),
-                  let renewal = store.renewalTerms(for: plan.id) else { continue }
-            trialTerms.append("After the \(trial), \(plan.title) renews at \(renewal) unless cancelled at least 24 hours before the trial ends.")
-        }
-        return (trialTerms + [baseDisclosure]).joined(separator: " ")
+        baseDisclosure
     }
 
     private var baseDisclosure: String {

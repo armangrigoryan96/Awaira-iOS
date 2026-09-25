@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var settings = AppSettings()
     @StateObject private var journal = JournalStore()
     @StateObject private var premiumStore = PremiumStore()
+    @StateObject private var trialAccess = TrialAccess()
     /// Detection is the app's primary job, so a completed onboarding starts it immediately.
     /// The header control remains a pause/resume switch for the rare times someone wants it off.
     @State private var cameraRequested = !ProcessInfo.processInfo.arguments.contains("-UITest")
@@ -35,39 +36,47 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if allowsPreviewAccess || premiumStore.isPremiumUnlocked {
+            if hasAppAccess {
                 appShell
             } else {
-                PremiumAccessGate(store: premiumStore)
+                PremiumAccessGate(store: premiumStore, trial: trialAccess)
             }
         }
         .preferredColorScheme(MobileAppearance(rawValue: appearance)?.colorScheme)
-        .task { await premiumStore.refresh() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await premiumStore.refresh() } }
+        .task {
+            trialAccess.refresh()
+            await premiumStore.refresh()
         }
-        .onChange(of: premiumStore.isPremiumUnlocked) { _, unlocked in
-            unlocked ? activatePremiumCapture() : deactivatePremiumCapture()
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                trialAccess.refresh()
+                Task { await premiumStore.refresh() }
+            }
+        }
+        .onChange(of: hasAppAccess) { _, hasAccess in
+            hasAccess ? activateCapture() : deactivateCapture()
         }
         .sheet(isPresented: $showingSettings) {
             MobileSettingsView(detector: detector, settings: settings, journal: journal,
                                vibrateEnabled: $vibrateEnabled, voiceEnabled: $voiceEnabled,
-                               blurEnabled: $blurEnabled, premiumStore: premiumStore)
+                               blurEnabled: $blurEnabled, premiumStore: premiumStore,
+                               trialAccess: trialAccess)
         }
         .sheet(isPresented: $showingPremiumPaywall) {
-            PremiumPaywallView(store: premiumStore)
+            PremiumPaywallView(store: premiumStore, trial: trialAccess)
         }
         .sheet(isPresented: $showingContext) { contextPrompt }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
             applyTiming()
             applyAlerts()
-            if premiumStore.isPremiumUnlocked {
-                activatePremiumCapture()
+            trialAccess.refresh()
+            if hasAppAccess {
+                activateCapture()
             } else {
                 // Onboarding may have already created the camera session. Never leave capture
                 // running behind the required purchase screen.
-                deactivatePremiumCapture()
+                deactivateCapture()
             }
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -77,6 +86,10 @@ struct ContentView: View {
         // Automated screenshots must be able to show ordinary product screens, but production
         // launches always go through the entitlement gate.
         ProcessInfo.processInfo.arguments.contains("-UITest")
+    }
+
+    private var hasAppAccess: Bool {
+        allowsPreviewAccess || trialAccess.isActive || premiumStore.isPremiumUnlocked
     }
 
     private var appShell: some View {
@@ -105,13 +118,13 @@ struct ContentView: View {
         }
     }
 
-    private func activatePremiumCapture() {
+    private func activateCapture() {
         guard !isUITest else { return }
         if detector.isPaused { detector.togglePause() }
         detector.start()
     }
 
-    private func deactivatePremiumCapture() {
+    private func deactivateCapture() {
         guard !isUITest, !detector.isPaused else { return }
         detector.togglePause()
     }

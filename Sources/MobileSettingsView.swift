@@ -36,6 +36,7 @@ struct MobileSettingsView: View {
     @Binding var voiceEnabled: Bool
     @Binding var blurEnabled: Bool
     @ObservedObject var premiumStore: PremiumStore
+    @ObservedObject var trialAccess: TrialAccess
 
     @AppStorage("mobileAppearance") private var appearance = MobileAppearance.dark.rawValue
     @Environment(\.dismiss) private var dismiss
@@ -59,7 +60,12 @@ struct MobileSettingsView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
 
                 Section {
-                    if premiumStore.isPremiumUnlocked {
+                    if let daysLeft = trialAccess.daysLeft {
+                        LabeledContent("Awaira free trial") {
+                            Text(daysLeft == 1 ? "Last day" : "\(daysLeft) days left")
+                                .foregroundStyle(AwairaPalette.accent)
+                        }
+                    } else if premiumStore.isPremiumUnlocked {
                         LabeledContent("Awaira Premium") {
                             Label("Active", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(AwairaPalette.live)
@@ -81,9 +87,11 @@ struct MobileSettingsView: View {
                 } header: {
                     Text("Premium")
                 } footer: {
-                    Text(premiumStore.isPremiumUnlocked
-                         ? "Premium is active on this Apple Account."
-                         : "Choose monthly, yearly, or a one-time Lifetime Unlock.")
+                    Text(trialAccess.isActive
+                         ? "You have full access until your trial ends."
+                         : (premiumStore.isPremiumUnlocked
+                            ? "Premium is active on this Apple Account."
+                            : "Choose monthly, yearly, or a one-time Lifetime Unlock."))
                 }
                 .listRowBackground(AwairaPalette.statsSurface)
 
@@ -194,7 +202,7 @@ struct MobileSettingsView: View {
             Text("This permanently removes Awaira data stored on this iPhone. It cannot be undone.")
         }
         .sheet(isPresented: $showingPremiumPaywall) {
-            PremiumPaywallView(store: premiumStore)
+            PremiumPaywallView(store: premiumStore, trial: trialAccess)
         }
     }
 
