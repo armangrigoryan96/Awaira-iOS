@@ -16,7 +16,7 @@ DEVICE      ?= 00008130-001A0C610EF3803A
 TEAM        ?= S6HG6FS5JJ
 DEVICE_DEST := platform=iOS,id=$(DEVICE)
 
-.PHONY: help install generate build test unit run device clean
+.PHONY: help install generate build test unit run device clean review-screenshots
 
 help:
 	@echo "make install   — install xcodegen (if needed), generate the project, build"
@@ -26,6 +26,7 @@ help:
 	@echo "make unit      — run unit tests only (fast)"
 	@echo "make run       — build, install and launch on '$(SIMULATOR)'"
 	@echo "make device    — build, install and launch on the connected iPhone"
+	@echo "make review-screenshots — capture one paywall image per in-app purchase into ReviewScreenshots/"
 	@echo "make clean     — remove build artifacts and the generated project"
 
 install:
@@ -67,6 +68,21 @@ device: generate
 	xcrun devicectl device install app --device $(DEVICE) "$$APP" | grep -E 'App installed|bundleID'
 	@xcrun devicectl device process launch --device $(DEVICE) \
 		--terminate-existing $(BUNDLE_ID) | tail -1
+
+# App Review needs one screenshot per in-app purchase. The paywall shows live StoreKit prices and
+# trial offers, so run this after App Store Connect is configured. Images land in ReviewScreenshots/.
+REVIEW_RESULT := build/review-screenshots.xcresult
+review-screenshots: generate
+	rm -rf $(REVIEW_RESULT) build/review-attachments
+	xcodebuild test -project $(PROJECT) -scheme $(SCHEME) -destination "$(DESTINATION)" \
+		-only-testing:AwairaUITests/StoreScreenshotCaptureTests/testCapturePremiumReviewScreens \
+		-resultBundlePath $(REVIEW_RESULT) | tail -3
+	xcrun xcresulttool export attachments --path $(REVIEW_RESULT) --output-path build/review-attachments >/dev/null
+	rm -f ReviewScreenshots/*.png
+	@python3 -c 'import json,shutil; m=json.load(open("build/review-attachments/manifest.json")); \
+	[shutil.copy("build/review-attachments/"+a["exportedFileName"], "ReviewScreenshots/"+a["suggestedHumanReadableName"].split("_")[0]+".png") \
+	 for t in m for a in t["attachments"]]'
+	@ls ReviewScreenshots
 
 clean:
 	rm -rf build $(PROJECT) Sources/Info.plist

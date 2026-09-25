@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The production access boundary. A seven-day free trial, completed Apple subscription trial,
-/// active subscription, or Lifetime Unlock is required to enter Awaira's tracking surfaces.
+/// The production access boundary. An Apple subscription free trial, active subscription, or
+/// Lifetime Unlock is required to enter Awaira's tracking surfaces. There is no device-local trial:
+/// every route in is a StoreKit entitlement.
 struct PremiumAccessGate: View {
     @ObservedObject var store: PremiumStore
 

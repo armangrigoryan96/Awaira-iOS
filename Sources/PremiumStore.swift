@@ -1,5 +1,4 @@
 import Foundation
-import Security
 import StoreKit
 
 /// The Premium products sold by the iPhone app.
@@ -43,16 +42,14 @@ final class PremiumStore: ObservableObject {
     /// grants a trial once per subscription group, so an ineligible customer is charged right away.
     @Published private(set) var trialEligibleProductIDs: Set<String> = []
     @Published private(set) var isPremiumUnlocked = false
-    /// The Android app begins with a seven-day, no-payment preview. Keep the same first-use
-    /// option on iPhone, with its start stored in Keychain so reinstalling cannot reset it.
-    @Published private(set) var isFreeTrialActive = false
-    @Published private(set) var freeTrialStartedAt: Date?
     @Published private(set) var state: PurchaseState = .loading
+    /// Set after a restore that found no purchase on this Apple Account, so the Restore button
+    /// always gives visible feedback. Cleared by the next refresh or purchase.
+    @Published private(set) var restoreFoundNothing = false
 
     private var transactionUpdates: Task<Void, Never>?
 
     init() {
-        refreshFreeTrialStatus()
         transactionUpdates = observeTransactionUpdates()
         Task { await refresh() }
     }
@@ -63,7 +60,7 @@ final class PremiumStore: ObservableObject {
 
     func refresh() async {
         state = .loading
-        refreshFreeTrialStatus()
+        restoreFoundNothing = false
         // Entitlements are cryptographically verified by StoreKit and are available from the
         // device's transaction database. Check them before asking the network for products so a
         // paying customer keeps access when the storefront is temporarily unavailable.
@@ -102,6 +99,23 @@ final class PremiumStore: ObservableObject {
         return "\(count)-\(unit) free trial"
     }
 
+    /// "$23.99 per year" — what a subscription renews at once its free trial ends. Apple requires
+    /// this to be stated beside any free-trial offer.
+    func renewalTerms(for productID: String) -> String? {
+        guard let product = product(for: productID),
+              let period = product.subscription?.subscriptionPeriod else { return nil }
+        let unit: String
+        switch period.unit {
+        case .day: unit = "day"
+        case .week: unit = "week"
+        case .month: unit = "month"
+        case .year: unit = "year"
+        @unknown default: return nil
+        }
+        let every = period.value == 1 ? unit : "\(period.value) \(unit)s"
+        return "\(product.displayPrice) per \(every)"
+    }
+
     /// The yearly price spread over twelve months, in the customer's own storefront currency.
     func monthlyEquivalentPrice(for productID: String) -> String? {
         guard let product = product(for: productID),
@@ -116,6 +130,7 @@ final class PremiumStore: ObservableObject {
         }
 
         state = .purchasing
+        restoreFoundNothing = false
         do {
             switch try await product.purchase() {
             case .success(let result):
@@ -135,23 +150,11 @@ final class PremiumStore: ObservableObject {
         }
     }
 
-    func startFreeTrial() {
-        refreshFreeTrialStatus()
-        guard freeTrialStartedAt == nil else { return }
-
-        let startedAt = Date()
-        guard LocalFreeTrialAccess.save(startedAt) else {
-            state = .failed("We couldn't start your free trial. Please try again.")
-            return
-        }
-        freeTrialStartedAt = startedAt
-        isFreeTrialActive = true
-    }
-
     func restorePurchases() async {
         do {
             try await AppStore.sync()
             await refresh()
+            restoreFoundNothing = !isPremiumUnlocked
         } catch {
             state = .failed("We couldn't restore purchases right now. Please try again.")
         }
@@ -180,15 +183,6 @@ final class PremiumStore: ObservableObject {
             }
         }
         isPremiumUnlocked = unlocked
-    }
-
-    private func refreshFreeTrialStatus() {
-        freeTrialStartedAt = LocalFreeTrialAccess.startedAt()
-        guard let freeTrialStartedAt else {
-            isFreeTrialActive = false
-            return
-        }
-        isFreeTrialActive = Date() < freeTrialStartedAt.addingTimeInterval(LocalFreeTrialAccess.duration)
     }
 
     private static func trialEligibleIDs(in products: [Product]) async -> Set<String> {
@@ -237,48 +231,4 @@ final class PremiumStore: ObservableObject {
 
 private enum StoreError: Error {
     case failedVerification
-}
-
-/// A device-local free trial has no purchase record. Keychain persists this small, non-sensitive
-/// timestamp across a delete/reinstall cycle, unlike UserDefaults, so it cannot be restarted by
-/// simply reinstalling the app.
-private enum LocalFreeTrialAccess {
-    static let duration: TimeInterval = 7 * 24 * 60 * 60
-    private static let service = "com.awaira.ios.free-trial"
-    private static let account = "started-at"
-
-    static func startedAt() -> Date? {
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query(returnData: true) as CFDictionary, &item)
-        guard status == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8),
-              let timestamp = TimeInterval(value) else { return nil }
-        return Date(timeIntervalSince1970: timestamp)
-    }
-
-    static func save(_ date: Date) -> Bool {
-        guard let data = String(date.timeIntervalSince1970).data(using: .utf8) else { return false }
-        let status = SecItemUpdate(query(returnData: false) as CFDictionary,
-                                   [kSecValueData as String: data] as CFDictionary)
-        if status == errSecSuccess { return true }
-        guard status == errSecItemNotFound else { return false }
-
-        var addQuery = query(returnData: false)
-        addQuery[kSecValueData as String] = data
-        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
-    }
-
-    private static func query(returnData: Bool) -> [String: Any] {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        if returnData {
-            query[kSecReturnData as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
-        }
-        return query
-    }
 }

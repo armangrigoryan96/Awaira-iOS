@@ -72,11 +72,11 @@ struct PremiumPaywallView: View {
 
     private var hero: some View {
         VStack(spacing: 8) {
-            Text("Start free, upgrade when ready.")
+            Text(heroTitle)
                 .scaledFont(28, weight: .bold, design: .rounded)
                 .foregroundStyle(AwairaPalette.text)
                 .multilineTextAlignment(.center)
-            Text("7-day free trial  ·  No account  ·  No credit card required")
+            Text(heroSubtitle)
                 .scaledFont(14, weight: .medium)
                 .foregroundStyle(AwairaPalette.ink.opacity(0.62))
                 .multilineTextAlignment(.center)
@@ -119,9 +119,19 @@ struct PremiumPaywallView: View {
                 Task { await store.restorePurchases() }
             }
             .scaledFont(14, weight: .medium)
-            .foregroundStyle(pricingAccent)
+            .foregroundStyle(AwairaPalette.accent)
             .frame(maxWidth: .infinity)
             .disabled(store.state == .purchasing)
+            .accessibilityIdentifier("premiumRestoreButton")
+
+            if store.restoreFoundNothing {
+                Text("No previous purchase was found for this Apple Account.")
+                    .awairaCaption(13)
+                    .foregroundStyle(AwairaPalette.ink.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+            }
         }
 
         if case .pending = store.state {
@@ -170,26 +180,37 @@ struct PremiumPaywallView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// The free-trial promise appears only when StoreKit says this Apple Account can redeem an
+    /// introductory offer; a customer who already used it is charged at once, so the copy must not
+    /// suggest otherwise. Names whichever plans carry the offer ("Monthly and Yearly include…").
+    private var trialPromise: String? {
+        let plans = PremiumPlan.all.filter { store.freeTrialDescription(for: $0.id) != nil }
+        guard let trial = plans.first.flatMap({ store.freeTrialDescription(for: $0.id) }) else { return nil }
+        let names = plans.map(\.title).joined(separator: " and ")
+        return "\(names) \(plans.count == 1 ? "includes" : "include") a \(trial)"
+    }
+
+    private var heroTitle: String {
+        trialPromise == nil ? "Choose your Awaira plan." : "Start free, upgrade when ready."
+    }
+
+    private var heroSubtitle: String {
+        if let trialPromise { return "\(trialPromise)  ·  Cancel anytime" }
+        return "No account needed  ·  Detection stays on-device"
+    }
+
     private func actionTitle(for plan: PremiumPlan) -> String {
-        if plan.isFreeTrial {
-            return store.freeTrialStartedAt == nil ? "Start free trial" : "Free trial already used"
-        }
         if store.state == .purchasing { return "Purchasing…" }
         if let trial = store.freeTrialDescription(for: plan.id) { return "Start \(trial)" }
         return "Choose plan"
     }
 
     private func actionEnabled(for plan: PremiumPlan) -> Bool {
-        if plan.isFreeTrial { return store.freeTrialStartedAt == nil }
         return displayedPrice(for: plan) != nil && store.state != .purchasing
     }
 
     private func choose(_ plan: PremiumPlan) {
-        if plan.isFreeTrial {
-            store.startFreeTrial()
-        } else {
-            Task { await store.purchase(productID: plan.id) }
-        }
+        Task { await store.purchase(productID: plan.id) }
     }
 
     /// Shown whenever the plans cannot be bought, so a customer on the required paywall is never left
@@ -210,11 +231,20 @@ struct PremiumPaywallView: View {
     }
 
     private func displayedPrice(for plan: PremiumPlan) -> String? {
-        if plan.isFreeTrial { return plan.reviewPrice }
         return store.product(for: plan.id)?.displayPrice ?? (isScreenshotDemo ? plan.reviewPrice : nil)
     }
 
     private var legalDisclosure: String {
+        var trialTerms: [String] = []
+        for plan in PremiumPlan.all {
+            guard let trial = store.freeTrialDescription(for: plan.id),
+                  let renewal = store.renewalTerms(for: plan.id) else { continue }
+            trialTerms.append("After the \(trial), \(plan.title) renews at \(renewal) unless cancelled at least 24 hours before the trial ends.")
+        }
+        return (trialTerms + [baseDisclosure]).joined(separator: " ")
+    }
+
+    private var baseDisclosure: String {
         "Monthly and yearly plans renew automatically unless cancelled at least 24 hours before the end of the current period. Lifetime Unlock is a one-time purchase. Payment is charged to your Apple Account after confirmation."
     }
 }
@@ -228,29 +258,20 @@ private struct PremiumPlan: Identifiable {
     let period: String
     let badge: String?
     let features: [String]
-    let isFreeTrial: Bool
 
-    static let free = PremiumPlan(id: "free-trial",
-                                  title: "Free trial", detail: "1 week free · No card",
-                                  reviewPrice: "Free", period: "for 7 days", badge: nil,
-                                  features: ["Full access for 7 days", "No credit card required", "No account needed"],
-                                  isFreeTrial: true)
     static let monthly = PremiumPlan(id: PremiumStore.monthlyProductID,
                                      title: "Monthly", detail: "Cancel anytime. No commitment.",
                                      reviewPrice: "$9.99", period: "per month", badge: nil,
-                                     features: ["Hand-to-face detection", "Blur and red-frame alerts", "Sound cue on detection", "Daily and weekly insights", "Weekly and monthly progress trends"],
-                                     isFreeTrial: false)
+                                     features: ["Hand-to-face detection", "Blur and red-frame alerts", "Sound cue on detection", "Daily and weekly insights", "Weekly and monthly progress trends"])
     static let yearly = PremiumPlan(id: PremiumStore.yearlyProductID,
                                     title: "Yearly", detail: "Best value for lasting progress.",
-                                    reviewPrice: "$24.99", period: "per year", badge: "MOST POPULAR",
-                                    features: ["Everything in Monthly", "A better annual price", "Best value for long-term improvement"],
-                                    isFreeTrial: false)
+                                    reviewPrice: "$23.99", period: "per year", badge: "MOST POPULAR",
+                                    features: ["Everything in Monthly", "A better annual price", "Best value for long-term improvement"])
     static let lifetime = PremiumPlan(id: PremiumStore.lifetimeProductID,
                                       title: "Lifetime", detail: "Pay once, keep forever",
                                       reviewPrice: "$49.99", period: "one-time purchase", badge: nil,
-                                      features: ["Everything in Yearly", "All future updates included", "One payment. Lifetime access."],
-                                      isFreeTrial: false)
-    static let all = [free, monthly, yearly, lifetime]
+                                      features: ["Everything in Yearly", "All future updates included", "One payment. Lifetime access."])
+    static let all = [monthly, yearly, lifetime]
 }
 
 private struct PlanChoice: View {
@@ -328,7 +349,7 @@ private struct PlanChoice: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .disabled(!actionEnabled)
             .opacity(actionEnabled ? 1 : 0.5)
-            .accessibilityIdentifier(plan.isFreeTrial ? "premiumFreeTrialButton" : "premiumPurchaseButton.\(plan.id)")
+            .accessibilityIdentifier("premiumPurchaseButton.\(plan.id)")
         }
         .frame(maxWidth: .infinity)
         .padding(16)
@@ -338,6 +359,6 @@ private struct PlanChoice: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(plan.badge == nil ? AwairaPalette.ink.opacity(0.1) : accent.opacity(0.6), lineWidth: 1.5)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }

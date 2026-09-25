@@ -35,7 +35,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if allowsPreviewAccess || premiumStore.isPremiumUnlocked || premiumStore.isFreeTrialActive {
+            if allowsPreviewAccess || premiumStore.isPremiumUnlocked {
                 appShell
             } else {
                 PremiumAccessGate(store: premiumStore)
@@ -48,9 +48,6 @@ struct ContentView: View {
         }
         .onChange(of: premiumStore.isPremiumUnlocked) { _, unlocked in
             unlocked ? activatePremiumCapture() : deactivatePremiumCapture()
-        }
-        .onChange(of: premiumStore.isFreeTrialActive) { _, active in
-            active ? activatePremiumCapture() : deactivatePremiumCapture()
         }
         .sheet(isPresented: $showingSettings) {
             MobileSettingsView(detector: detector, settings: settings, journal: journal,
@@ -65,7 +62,7 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = true
             applyTiming()
             applyAlerts()
-            if premiumStore.isPremiumUnlocked || premiumStore.isFreeTrialActive {
+            if premiumStore.isPremiumUnlocked {
                 activatePremiumCapture()
             } else {
                 // Onboarding may have already created the camera session. Never leave capture
